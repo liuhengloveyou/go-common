@@ -47,27 +47,23 @@ func PostRequest(path string, body []byte, headers *map[string]string) (status i
 	return
 }
 
-func GetRequest(path string) ([]byte, error) {
+func GetRequest(path string) (statusCode int, body []byte, err error) {
 	if path == "" {
-		return nil, fmt.Errorf("URL nil")
+		return 0, nil, fmt.Errorf("URL nil")
 	}
 
 	response, err := http.Get(path)
 	if err != nil {
-		return nil, err
+		return 0, nil, err
 	}
 
-	body, err := ioutil.ReadAll(response.Body)
+	body, err = ioutil.ReadAll(response.Body)
 	if err != nil {
-		return nil, err
+		return 0, nil, err
 	}
 	response.Body.Close()
 
-	if response.StatusCode != 200 {
-		return nil, fmt.Errorf("%d\r\n%s", response.StatusCode, string(body))
-	}
-
-	return body, nil
+	return response.StatusCode, body, nil
 }
 
 func HttpErr(w http.ResponseWriter, statCode int, body []byte) {
