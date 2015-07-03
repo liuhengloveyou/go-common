@@ -15,7 +15,7 @@ type GlobalID struct {
 func (p *GlobalID) Init(servID, expand string) {
 	p.servID = servID
 	p.expand = expand
-	p.monent = time.Now().Unix()
+	p.monent = time.Now().Unix()[4:]
 	p.Hole = make(chan string)
 
 	go func() {
