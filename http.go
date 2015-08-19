@@ -8,7 +8,7 @@ import (
 	"net/http"
 )
 
-func PostRequest(path string, body []byte, headers *map[string]string) (status int, cookies []*http.Cookie, responseBody []byte, err error) {
+func PostRest(path string, body []byte, cookies []*http.Cookie, headers *map[string]string) (statuCode int, responseCookies []*http.Cookie, responseBody []byte, err error) {
 	if path == "" {
 		return 0, nil, nil, fmt.Errorf("path nil.")
 	}
@@ -22,6 +22,13 @@ func PostRequest(path string, body []byte, headers *map[string]string) (status i
 	request, err := http.NewRequest("POST", path, requestReader)
 	if err != nil {
 		return 0, nil, nil, err
+	}
+
+	// cookies
+	if cookies != nil {
+		for _, cookie := range cookies {
+			request.AddCookie(cookie)
+		}
 	}
 
 	// header
@@ -40,8 +47,8 @@ func PostRequest(path string, body []byte, headers *map[string]string) (status i
 	}
 	defer response.Body.Close()
 
-	status = response.StatusCode
-	cookies = response.Cookies()
+	statuCode = response.StatusCode
+	responseCookies = response.Cookies()
 	responseBody, err = ioutil.ReadAll(response.Body)
 
 	return
