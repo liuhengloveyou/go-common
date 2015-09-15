@@ -73,7 +73,7 @@ func GetRequest(path string) (statusCode int, body []byte, err error) {
 	return response.StatusCode, body, nil
 }
 
-func HttpErr(w http.ResponseWriter, statCode int, body []byte) {
+func HttpErr(w http.ResponseWriter, statCode int, body string) {
 	w.WriteHeader(statCode)
-	w.Write(body)
+	w.Write([]byte(body))
 }
