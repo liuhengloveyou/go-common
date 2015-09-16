@@ -12,9 +12,6 @@ func PostRest(path string, body []byte, cookies []*http.Cookie, headers *map[str
 	if path == "" {
 		return 0, nil, nil, fmt.Errorf("path nil.")
 	}
-	if body == nil {
-		return 0, nil, nil, fmt.Errorf("body nil.")
-	}
 
 	// body
 	bodyBuff := bytes.NewBuffer(body)
