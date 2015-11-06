@@ -8,7 +8,7 @@ import (
 )
 
 func TestGlobalID(t *testing.T) {
-	g := &common.GlobalID{Type: "T", ServID: "S", Expand: "E"}
+	g := &common.GlobalID{Type: "T", Expand: "E"}
 
 	for i := 0; i < 100; i++ {
 		fmt.Println(g.ID())

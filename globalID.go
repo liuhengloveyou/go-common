@@ -7,7 +7,6 @@ import (
 
 type GlobalID struct {
 	Type   string
-	ServID string
 	Expand string
 	moment string
 
@@ -16,14 +15,14 @@ type GlobalID struct {
 
 func (p *GlobalID) ID() string {
 	if p.moment == "" {
-		p.moment = fmt.Sprintf("%d", time.Now().Unix())[4:]
+		p.moment = fmt.Sprintf("%v", time.Now().Unix())
 		p.hole = make(chan string)
 
 		go func() {
 			var serial int64 = 0
 
 			for {
-				p.hole <- fmt.Sprintf("%v%v%v%v%v", p.Type, p.ServID, p.moment, p.Expand, serial)
+				p.hole <- fmt.Sprintf("%v%v%v%v", p.Type, p.Expand, p.moment, serial)
 				serial += 1
 			}
 		}()
