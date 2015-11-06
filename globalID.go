@@ -22,7 +22,7 @@ func (p *GlobalID) ID() string {
 			var serial int64 = 0
 
 			for {
-				p.hole <- fmt.Sprintf("%v%v%v%v", p.Type, p.Expand, p.moment, serial)
+				p.hole <- fmt.Sprintf("%v%v%v%v", p.Type, p.moment, p.Expand, serial)
 				serial += 1
 			}
 		}()
