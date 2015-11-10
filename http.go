@@ -72,5 +72,8 @@ func GetRequest(path string) (statusCode int, body []byte, err error) {
 
 func HttpErr(w http.ResponseWriter, statCode int, body string) {
 	w.WriteHeader(statCode)
-	w.Write([]byte(body))
+	if _, e := w.Write([]byte(body)); e != nil {
+		panic(e)
+	}
+	w.(http.Flusher).Flush()
 }
