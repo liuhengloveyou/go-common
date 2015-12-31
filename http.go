@@ -8,7 +8,7 @@ import (
 	"net/http"
 )
 
-func PostRest(path string, body []byte, cookies []*http.Cookie, headers *map[string]string) (statuCode int, responseCookies []*http.Cookie, responseBody []byte, err error) {
+func PostRequest(path string, body []byte, headers *map[string]string, cookies []*http.Cookie) (statuCode int, responseCookies []*http.Cookie, responseBody []byte, err error) {
 	if path == "" {
 		return 0, nil, nil, fmt.Errorf("path nil.")
 	}
@@ -70,9 +70,10 @@ func GetRequest(path string) (statusCode int, body []byte, err error) {
 	return response.StatusCode, body, nil
 }
 
-func HttpErr(w http.ResponseWriter, statCode int, body string) {
+func HttpErr(w http.ResponseWriter, statCode int, message string) {
+	w.Header().Set("content-type", "application/json")
 	w.WriteHeader(statCode)
-	if _, e := w.Write([]byte(body)); e != nil {
+	if _, e := fmt.Fprintf(w, "{\"message\":\"%s\"}", message); e != nil {
 		panic(e)
 	}
 	w.(http.Flusher).Flush()
