@@ -51,23 +51,23 @@ func PostRequest(path string, body []byte, headers *map[string]string, cookies [
 	return
 }
 
-func GetRequest(path string) (statusCode int, body []byte, err error) {
+func GetRequest(path string) (statusCode int, responseCookies []*http.Cookie, body []byte, err error) {
 	if path == "" {
-		return 0, nil, fmt.Errorf("URL nil")
+		return 0, nil, nil, fmt.Errorf("URL nil")
 	}
 
 	response, err := http.Get(path)
 	if err != nil {
-		return 0, nil, err
+		return 0, nil, nil, err
 	}
 
 	body, err = ioutil.ReadAll(response.Body)
 	if err != nil {
-		return 0, nil, err
+		return 0, nil, nil, err
 	}
 	response.Body.Close()
 
-	return response.StatusCode, body, nil
+	return response.StatusCode, response.Cookies(), body, nil
 }
 
 func HttpErr(w http.ResponseWriter, statCode int, message string) {
