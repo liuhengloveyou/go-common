@@ -6,7 +6,7 @@ import (
 	"fmt"
 
 	_ "github.com/go-sql-driver/mysql"
-	// "github.com/go-xorm/xorm"
+	"github.com/go-xorm/xorm"
 )
 
 type DBmysql struct {
@@ -35,7 +35,7 @@ func InitDBPool(conf interface{}, pool interface{}) (err error) {
 	for _, db := range dbs {
 		switch db.NGType {
 		case "xorm":
-			// pool.(map[string]*xorm.Engine)[db.Name], err = xorm.NewEngine(db.DBType, db.DSN)
+			pool.(map[string]*xorm.Engine)[db.Name], err = xorm.NewEngine(db.DBType, db.DSN)
 		case "mysql":
 			DBConn := &DBmysql{DSN: db.DSN}
 			DBConn.conn, err = sql.Open(db.DBType, db.DSN)
