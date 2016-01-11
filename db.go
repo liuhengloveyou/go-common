@@ -11,7 +11,7 @@ import (
 
 type DBmysql struct {
 	DSN  string
-	conn *sql.DB
+	Conn *sql.DB
 }
 
 type DBConf struct {
@@ -38,7 +38,7 @@ func InitDBPool(conf interface{}, pool interface{}) (err error) {
 			pool.(map[string]*xorm.Engine)[db.Name], err = xorm.NewEngine(db.DBType, db.DSN)
 		case "mysql":
 			DBConn := &DBmysql{DSN: db.DSN}
-			DBConn.conn, err = sql.Open(db.DBType, db.DSN)
+			DBConn.Conn, err = sql.Open(db.DBType, db.DSN)
 			pool.(map[string]*DBmysql)[db.Name] = DBConn
 		default:
 			return fmt.Errorf("未知的ng_type: %v", db.NGType)
@@ -58,7 +58,7 @@ func (this *DBmysql) Query(sqlStr string, args ...interface{}) (rst []map[string
 		rows *sql.Rows = nil
 	)
 
-	stmt, err = this.conn.Prepare(sqlStr)
+	stmt, err = this.Conn.Prepare(sqlStr)
 	if err != nil {
 		return
 	}
@@ -103,7 +103,7 @@ func (this *DBmysql) Query(sqlStr string, args ...interface{}) (rst []map[string
 }
 
 func (this *DBmysql) Insert(sqlStr string, args ...interface{}) (int64, error) {
-	stmt, err := this.conn.Prepare(sqlStr)
+	stmt, err := this.Conn.Prepare(sqlStr)
 	if err != nil {
 		return -1, err
 	}
@@ -118,7 +118,7 @@ func (this *DBmysql) Insert(sqlStr string, args ...interface{}) (int64, error) {
 }
 
 func (this *DBmysql) Update(sqlStr string, args ...interface{}) (int64, error) {
-	stmt, err := this.conn.Prepare(sqlStr)
+	stmt, err := this.Conn.Prepare(sqlStr)
 	if err != nil {
 		return -1, err
 	}
