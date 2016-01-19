@@ -51,21 +51,35 @@ func PostRequest(path string, body []byte, headers *map[string]string, cookies [
 	return
 }
 
-func GetRequest(path string) (statusCode int, responseCookies []*http.Cookie, body []byte, err error) {
+func GetRequest(path string, headers *map[string]string) (statusCode int, responseCookies []*http.Cookie, body []byte, err error) {
 	if path == "" {
 		return 0, nil, nil, fmt.Errorf("URL nil")
 	}
 
-	response, err := http.Get(path)
+	request, err := http.NewRequest("GET", path, nil)
 	if err != nil {
 		return 0, nil, nil, err
 	}
+
+	// header
+	request.Header.Add("Content-Type", "text/html")
+	if headers != nil {
+		for k, v := range *headers {
+			request.Header.Add(k, v)
+		}
+	}
+
+	// request
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		return 0, nil, nil, err
+	}
+	defer response.Body.Close()
 
 	body, err = ioutil.ReadAll(response.Body)
 	if err != nil {
 		return 0, nil, nil, err
 	}
-	response.Body.Close()
 
 	return response.StatusCode, response.Cookies(), body, nil
 }
