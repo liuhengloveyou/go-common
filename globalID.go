@@ -8,25 +8,42 @@ import (
 type GlobalID struct {
 	Type   string
 	Expand string
-	moment string
+	moment int64
 
-	hole chan string
+	stringHole chan string
+	int64Hole  chan int64
 }
 
 func (p *GlobalID) ID() string {
-	if p.moment == "" {
-		p.moment = fmt.Sprintf("%v", time.Now().Unix())
-		p.hole = make(chan string)
+	if p.moment == 0 {
+		p.moment = time.Now().Unix()
+		p.stringHole = make(chan string)
 
 		go func() {
 			var serial int64 = 0
 
 			for {
-				p.hole <- fmt.Sprintf("%v%v%v%v", p.Type, p.Expand, p.moment, serial)
+				p.stringHole <- fmt.Sprintf("%v%v%v%v", p.Type, p.Expand, p.moment, serial)
 				serial += 1
 			}
 		}()
 	}
 
-	return <-p.hole
+	return <-p.stringHole
+}
+
+func (p *GlobalID) LogicClock(clock int64) int64 {
+	if p.moment == 0 {
+		p.moment = time.Now().Unix()
+		p.int64Hole = make(chan int64)
+
+		go func() {
+			for {
+				p.int64Hole <- p.moment
+				p.moment += 1
+			}
+		}()
+	}
+
+	return <-p.int64Hole
 }
