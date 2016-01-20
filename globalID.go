@@ -12,9 +12,7 @@ type GlobalID struct {
 	moment int64
 
 	stringHole chan string
-	int64Hole  chan int64
-
-	lock *sync.Mutex
+	lock       sync.Mutex
 }
 
 func (p *GlobalID) ID() string {
@@ -38,24 +36,15 @@ func (p *GlobalID) ID() string {
 func (p *GlobalID) LogicClock(clock int64) int64 {
 	if p.moment == 0 {
 		p.moment = time.Now().Unix()
-		p.int64Hole = make(chan int64)
-		p.lock = new(sync.Mutex)
-
-		go func() {
-			for {
-				p.moment += 1
-				p.int64Hole <- p.moment
-			}
-		}()
 	}
 
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
-	current := <-p.int64Hole
-	for clock >= current {
-		current = <-p.int64Hole
+	p.moment += 1
+	if clock >= p.moment {
+		p.moment = clock + 1
 	}
 
-	return current
+	return p.moment
 }
