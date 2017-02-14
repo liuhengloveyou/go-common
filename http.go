@@ -96,9 +96,9 @@ func DownloadFile(url, path, tmpath, fileMd5 string, headers map[string]string) 
 			if e := os.Remove(tmpath); e != nil {
 				return 0, e
 			}
-		}
 
-		return 0, fmt.Errorf("md5 ERR: ", fileMd5, nmd5)
+			return 0, fmt.Errorf("md5 ERR: ", fileMd5, nmd5)
+		}
 	}
 
 	if err = os.Rename(tmpath, path); err != nil {
