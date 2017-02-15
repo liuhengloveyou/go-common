@@ -11,14 +11,15 @@ import (
 	"os"
 )
 
-func DownloadFile(url, path, tmpath, fileMd5 string, headers map[string]string) (written int64, err error) {
+func DownloadFile(url, path, tmpath, fileMd5 string, headers map[string]string) (http.Header, error) {
 	var (
+		err error
 		h   hash.Hash
 		dst *os.File
 	)
 
 	if dst, err = os.Create(tmpath); err != nil {
-		return 0, err
+		return nil, err
 	}
 
 	if "" != fileMd5 {
@@ -29,7 +30,7 @@ func DownloadFile(url, path, tmpath, fileMd5 string, headers map[string]string) 
 
 	request, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 
 	// header
@@ -42,18 +43,18 @@ func DownloadFile(url, path, tmpath, fileMd5 string, headers map[string]string) 
 	// request
 	response, err := http.DefaultClient.Do(request)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("%d", response.StatusCode)
+	}
 
 	// download
 	for {
 		nr, er := response.Body.Read(buf)
 		if nr > 0 {
 			nw, ew := dst.Write(buf[0:nr])
-			if nw > 0 {
-				written += int64(nw)
-			}
 			if ew != nil {
 				err = ew
 				break
@@ -86,7 +87,7 @@ func DownloadFile(url, path, tmpath, fileMd5 string, headers map[string]string) 
 		}
 	}
 	if err = dst.Close(); err != nil {
-		return 0, err
+		return nil, err
 	}
 
 	// check md5
@@ -94,24 +95,24 @@ func DownloadFile(url, path, tmpath, fileMd5 string, headers map[string]string) 
 		nmd5 := fmt.Sprintf("%x", h.Sum(nil))
 		if fileMd5 != nmd5 {
 			if e := os.Remove(tmpath); e != nil {
-				return 0, e
+				return nil, e
 			}
 
-			return 0, fmt.Errorf("md5 ERR: ", fileMd5, nmd5)
+			return nil, fmt.Errorf("md5 ERR: ", fileMd5, nmd5)
 		}
 	}
 
 	if err = os.Rename(tmpath, path); err != nil {
-		return 0, err
+		return nil, err
 	}
 
 	if _, err = os.Stat(path); err != nil {
 		if os.IsNotExist(err) {
-			return 0, fmt.Errorf("download err.")
+			return nil, fmt.Errorf("download err.")
 		}
 	}
 
-	return written, nil
+	return response.Header, nil
 }
 
 func PostRequest(path string, body []byte, headers *map[string]string, cookies []*http.Cookie) (statuCode int, responseCookies []*http.Cookie, responseBody []byte, err error) {
