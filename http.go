@@ -36,6 +36,10 @@ func DownloadFile(url, path, tmpath, fileMd5 string, headers map[string]string) 
 	// header
 	if headers != nil {
 		for k, v := range headers {
+			if k == "Host" {
+				request.Host = v
+				continue
+			}
 			request.Header.Set(k, v)
 		}
 	}
