@@ -8,7 +8,11 @@ import (
 )
 
 func TestDownload(t *testing.T) {
-	url := "http://b.aa.cm/image/77c6a7efce1b9d1634356c61f1deb48f8d5464c4.jpg"
-	wr, err := common.DownloadFile(url, "/tmp/aaa.jpg", "/tmp/bbb", "aacbfda14fee114e7849738bd9e68623", nil)
+	url := "http://e.hiphotos.baidu.com/image/pic/item/a1ec08fa513d2697e54749d557fbb2fb4216d8a6.jpg"
+	wr, err := common.DownloadFile(url, "/tmp/aaa.jpg", "/tmp/bbb", "", nil)
+	fmt.Printf("%#v; %v\n\n", wr, err)
+
+	url = "unix:/tmp/nginx.sock:http://demo/lua"
+	wr, err = common.DownloadFile(url, "/tmp/lua", "/tmp/bbb", "", nil)
 	fmt.Printf("%#v; %v", wr, err)
 }

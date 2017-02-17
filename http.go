@@ -7,15 +7,19 @@ import (
 	"hash"
 	"io"
 	"io/ioutil"
+	"net"
 	"net/http"
 	"os"
+	"strings"
 )
 
+// unix:socket:http://host/uri
 func DownloadFile(url, path, tmpath, fileMd5 string, headers map[string]string) (http.Header, error) {
 	var (
-		err error
-		h   hash.Hash
-		dst *os.File
+		err    error
+		h      hash.Hash
+		dst    *os.File
+		client *http.Client = http.DefaultClient
 	)
 
 	if dst, err = os.Create(tmpath); err != nil {
@@ -27,6 +31,24 @@ func DownloadFile(url, path, tmpath, fileMd5 string, headers map[string]string) 
 	}
 
 	buf := make([]byte, 32*1024)
+
+	// unix domain socket?
+	if strings.HasPrefix(url, "unix") {
+		urlfild := strings.Split(url, ":")
+		fmt.Println(urlfild)
+		if len(urlfild) != 4 {
+			return nil, fmt.Errorf("url format err")
+		}
+
+		url = fmt.Sprintf("%s:%s", urlfild[2], urlfild[3])
+		client = &http.Client{
+			Transport: &http.Transport{
+				Dial: func(proto, addr string) (conn net.Conn, err error) {
+					return net.Dial("unix", urlfild[1])
+				},
+			},
+		}
+	}
 
 	request, err := http.NewRequest("GET", url, nil)
 	if err != nil {
@@ -45,7 +67,7 @@ func DownloadFile(url, path, tmpath, fileMd5 string, headers map[string]string) 
 	}
 
 	// request
-	response, err := http.DefaultClient.Do(request)
+	response, err := client.Do(request)
 	if err != nil {
 		return nil, err
 	}
@@ -110,10 +132,8 @@ func DownloadFile(url, path, tmpath, fileMd5 string, headers map[string]string) 
 		return nil, err
 	}
 
-	if _, err = os.Stat(path); err != nil {
-		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("download err.")
-		}
+	if _, err = os.Stat(path); err != nil && os.IsNotExist(err) {
+		return nil, fmt.Errorf("download err.")
 	}
 
 	return response.Header, nil
