@@ -37,7 +37,7 @@ func DownloadFile(url, path, tmpath, fileMd5 string, headers map[string]string) 
 		urlfild := strings.Split(url, ":")
 		fmt.Println(urlfild)
 		if len(urlfild) != 4 {
-			return nil, fmt.Errorf("url format err")
+			return nil, fmt.Errorf("url err")
 		}
 
 		url = fmt.Sprintf("%s:%s", urlfild[2], urlfild[3])
@@ -73,7 +73,7 @@ func DownloadFile(url, path, tmpath, fileMd5 string, headers map[string]string) 
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("%d", response.StatusCode)
+		return nil, fmt.Errorf("response err %d", response.StatusCode)
 	}
 
 	// download
@@ -124,7 +124,7 @@ func DownloadFile(url, path, tmpath, fileMd5 string, headers map[string]string) 
 				return nil, e
 			}
 
-			return nil, fmt.Errorf("md5 ERR: ", fileMd5, nmd5)
+			return nil, fmt.Errorf("md5 err")
 		}
 	}
 
@@ -133,7 +133,7 @@ func DownloadFile(url, path, tmpath, fileMd5 string, headers map[string]string) 
 	}
 
 	if _, err = os.Stat(path); err != nil && os.IsNotExist(err) {
-		return nil, fmt.Errorf("download err.")
+		return nil, fmt.Errorf("download err")
 	}
 
 	return response.Header, nil
