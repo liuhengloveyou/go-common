@@ -12,7 +12,7 @@ func TestDownload(t *testing.T) {
 	wr, err := common.DownloadFile(url, "/tmp/aaa.jpg", "/tmp/bbb", "", nil)
 	fmt.Printf("%#v; %v\n\n", wr, err)
 
-	url = "unix:/tmp/nginx.sock:http://demo/lua"
+	url = "unix:/tmp/nginx.sock:http://demo:80/lua"
 	wr, err = common.DownloadFile(url, "/tmp/lua", "/tmp/bbb", "", nil)
 	fmt.Printf("%#v; %v", wr, err)
 }

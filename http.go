@@ -35,8 +35,7 @@ func DownloadFile(url, path, tmpath, fileMd5 string, headers map[string]string) 
 	// unix domain socket?
 	if strings.HasPrefix(url, "unix") {
 		urlfild := strings.Split(url, ":")
-		fmt.Println(urlfild)
-		if len(urlfild) != 4 {
+		if len(urlfild) < 4 {
 			return nil, fmt.Errorf("url err")
 		}
 
