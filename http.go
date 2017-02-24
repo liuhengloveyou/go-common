@@ -13,7 +13,7 @@ import (
 	"strings"
 )
 
-// unix:socket:http://host/uri
+// "unix socket http://host:port/uri"
 func DownloadFile(url, path, tmpath, fileMd5 string, headers map[string]string) (http.Header, error) {
 	var (
 		err    error
@@ -34,12 +34,12 @@ func DownloadFile(url, path, tmpath, fileMd5 string, headers map[string]string) 
 
 	// unix domain socket?
 	if strings.HasPrefix(url, "unix") {
-		urlfild := strings.Split(url, ":")
-		if len(urlfild) < 4 {
+		urlfild := strings.Fields(url)
+		if len(urlfild) != 3 {
 			return nil, fmt.Errorf("url err")
 		}
 
-		url = fmt.Sprintf("%s:%s", urlfild[2], urlfild[3])
+		url = urlfild[2]
 		client = &http.Client{
 			Transport: &http.Transport{
 				Dial: func(proto, addr string) (conn net.Conn, err error) {
