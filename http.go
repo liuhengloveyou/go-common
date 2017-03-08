@@ -3,6 +3,7 @@ package common
 import (
 	"bytes"
 	"crypto/md5"
+	"errors"
 	"fmt"
 	"hash"
 	"io"
@@ -36,7 +37,7 @@ func DownloadFile(url, path, tmpath, fileMd5 string, headers map[string]string) 
 	if strings.HasPrefix(url, "unix") {
 		urlfild := strings.Fields(url)
 		if len(urlfild) != 3 {
-			return nil, fmt.Errorf("url err")
+			return nil, errors.New("url err")
 		}
 
 		url = urlfild[2]
@@ -72,8 +73,10 @@ func DownloadFile(url, path, tmpath, fileMd5 string, headers map[string]string) 
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("response err %d", response.StatusCode)
+		return response.Header, errors.New("response err")
 	}
+
+	var contentLength int = int(response.ContentLength)
 
 	// download
 	for {
@@ -88,6 +91,8 @@ func DownloadFile(url, path, tmpath, fileMd5 string, headers map[string]string) 
 				err = io.ErrShortWrite
 				break
 			}
+
+			contentLength = contentLength - nr
 
 			// md5
 			if "" != fileMd5 {
@@ -112,7 +117,11 @@ func DownloadFile(url, path, tmpath, fileMd5 string, headers map[string]string) 
 		}
 	}
 	if err = dst.Close(); err != nil {
-		return nil, err
+		return response.Header, err
+	}
+
+	if contentLength > 0 {
+		return response.Header, errors.New("short body")
 	}
 
 	// check md5
@@ -120,19 +129,19 @@ func DownloadFile(url, path, tmpath, fileMd5 string, headers map[string]string) 
 		nmd5 := fmt.Sprintf("%x", h.Sum(nil))
 		if fileMd5 != nmd5 {
 			if e := os.Remove(tmpath); e != nil {
-				return nil, e
+				return response.Header, e
 			}
 
-			return nil, fmt.Errorf("md5 err")
+			return response.Header, errors.New("md5 err")
 		}
 	}
 
 	if err = os.Rename(tmpath, path); err != nil {
-		return nil, err
+		return response.Header, err
 	}
 
 	if _, err = os.Stat(path); err != nil && os.IsNotExist(err) {
-		return nil, fmt.Errorf("download err")
+		return response.Header, errors.New("download err")
 	}
 
 	return response.Header, nil
@@ -140,7 +149,7 @@ func DownloadFile(url, path, tmpath, fileMd5 string, headers map[string]string) 
 
 func PostRequest(path string, body []byte, headers *map[string]string, cookies []*http.Cookie) (statuCode int, responseCookies []*http.Cookie, responseBody []byte, err error) {
 	if path == "" {
-		return 0, nil, nil, fmt.Errorf("path nil.")
+		return 0, nil, nil, errors.New("path nil.")
 	}
 
 	// body
@@ -183,7 +192,7 @@ func PostRequest(path string, body []byte, headers *map[string]string, cookies [
 
 func GetRequest(path string, headers *map[string]string) (statusCode int, responseCookies []*http.Cookie, body []byte, err error) {
 	if path == "" {
-		return 0, nil, nil, fmt.Errorf("URL nil")
+		return 0, nil, nil, errors.New("url nil")
 	}
 
 	request, err := http.NewRequest("GET", path, nil)
