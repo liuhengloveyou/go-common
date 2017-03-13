@@ -26,6 +26,11 @@ func DownloadFile(url, path, tmpath, fileMd5 string, headers map[string]string) 
 	if dst, err = os.Create(tmpath); err != nil {
 		return nil, err
 	}
+	defer func() { // 删除临时文件
+		if _, err := os.Stat(tmpath); err == nil || os.IsExist(err) {
+			os.Remove(tmpath)
+		}
+	}()
 
 	if "" != fileMd5 {
 		h = md5.New()
