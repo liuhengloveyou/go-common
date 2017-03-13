@@ -27,6 +27,9 @@ func DownloadFile(url, path, tmpath, fileMd5 string, headers map[string]string) 
 		return nil, err
 	}
 	defer func() { // 删除临时文件
+		if dst != nil {
+			dst.Close()
+		}
 		if _, err := os.Stat(tmpath); err == nil || os.IsExist(err) {
 			os.Remove(tmpath)
 		}
