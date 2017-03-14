@@ -24,14 +24,14 @@ func DownloadFile(url, path, tmpath, fileMd5 string, headers map[string]string) 
 	)
 
 	if dst, err = os.Create(tmpath); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("create tmp file: %s", err.Error())
 	}
 	defer func() { // 删除临时文件
 		if dst != nil {
-			dst.Close()
+			_ = dst.Close()
 		}
 		if _, err := os.Stat(tmpath); err == nil || os.IsExist(err) {
-			os.Remove(tmpath)
+			_ = os.Remove(tmpath)
 		}
 	}()
 
@@ -60,7 +60,7 @@ func DownloadFile(url, path, tmpath, fileMd5 string, headers map[string]string) 
 
 	request, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("http.NewRequest: %s", err.Error())
 	}
 
 	// header
@@ -77,11 +77,11 @@ func DownloadFile(url, path, tmpath, fileMd5 string, headers map[string]string) 
 	// request
 	response, err := client.Do(request)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("http.Do: %s", err.Error())
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
-		return response.Header, errors.New("response err")
+		return response.Header, fmt.Errorf("http.StatusCode: %d", response.StatusCode)
 	}
 
 	var contentLength int = int(response.ContentLength)
@@ -125,7 +125,7 @@ func DownloadFile(url, path, tmpath, fileMd5 string, headers map[string]string) 
 		}
 	}
 	if err = dst.Close(); err != nil {
-		return response.Header, err
+		return response.Header, fmt.Errorf("close tmp file: %s", err.Error())
 	}
 
 	if contentLength > 0 {
@@ -145,7 +145,7 @@ func DownloadFile(url, path, tmpath, fileMd5 string, headers map[string]string) 
 	}
 
 	if err = os.Rename(tmpath, path); err != nil {
-		return response.Header, err
+		return response.Header, fmt.Errorf("rename: %s", err.Error())
 	}
 
 	if _, err = os.Stat(path); err != nil && os.IsNotExist(err) {
