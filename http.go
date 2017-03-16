@@ -11,11 +11,12 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path"
 	"strings"
 )
 
 // "unix socket http://host:port/uri"
-func DownloadFile(url, path, tmpath, fileMd5 string, headers map[string]string) (http.Header, error) {
+func DownloadFile(url, dstpath, tmpath, fileMd5 string, headers map[string]string) (http.Header, error) {
 	var (
 		err    error
 		h      hash.Hash
@@ -23,9 +24,14 @@ func DownloadFile(url, path, tmpath, fileMd5 string, headers map[string]string) 
 		client *http.Client = http.DefaultClient
 	)
 
+	if err := os.MkdirAll(path.Dir(dstpath), 0755); err != nil {
+		return nil, fmt.Errorf("create dst file: %s", err.Error())
+	}
+
 	if dst, err = os.Create(tmpath); err != nil {
 		return nil, fmt.Errorf("create tmp file: %s", err.Error())
 	}
+
 	defer func() { // 删除临时文件
 		if dst != nil {
 			_ = dst.Close()
@@ -144,26 +150,26 @@ func DownloadFile(url, path, tmpath, fileMd5 string, headers map[string]string) 
 		}
 	}
 
-	if err = os.Rename(tmpath, path); err != nil {
+	if err = os.Rename(tmpath, dstpath); err != nil {
 		return response.Header, fmt.Errorf("rename: %s", err.Error())
 	}
 
-	if _, err = os.Stat(path); err != nil && os.IsNotExist(err) {
+	if _, err = os.Stat(dstpath); err != nil && os.IsNotExist(err) {
 		return response.Header, errors.New("download err")
 	}
 
 	return response.Header, nil
 }
 
-func PostRequest(path string, body []byte, headers *map[string]string, cookies []*http.Cookie) (statuCode int, responseCookies []*http.Cookie, responseBody []byte, err error) {
-	if path == "" {
-		return 0, nil, nil, errors.New("path nil.")
+func PostRequest(res string, body []byte, headers *map[string]string, cookies []*http.Cookie) (statuCode int, responseCookies []*http.Cookie, responseBody []byte, err error) {
+	if res == "" {
+		return 0, nil, nil, errors.New("res nil.")
 	}
 
 	// body
 	bodyBuff := bytes.NewBuffer(body)
 	requestReader := io.MultiReader(bodyBuff)
-	request, err := http.NewRequest("POST", path, requestReader)
+	request, err := http.NewRequest("POST", res, requestReader)
 	if err != nil {
 		return 0, nil, nil, err
 	}
@@ -198,12 +204,12 @@ func PostRequest(path string, body []byte, headers *map[string]string, cookies [
 	return
 }
 
-func GetRequest(path string, headers *map[string]string) (statusCode int, responseCookies []*http.Cookie, body []byte, err error) {
-	if path == "" {
+func GetRequest(res string, headers *map[string]string) (statusCode int, responseCookies []*http.Cookie, body []byte, err error) {
+	if res == "" {
 		return 0, nil, nil, errors.New("url nil")
 	}
 
-	request, err := http.NewRequest("GET", path, nil)
+	request, err := http.NewRequest("GET", res, nil)
 	if err != nil {
 		return 0, nil, nil, err
 	}
