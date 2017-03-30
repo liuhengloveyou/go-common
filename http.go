@@ -124,7 +124,7 @@ func DownloadFile(url, dstpath, tmpath, fileMd5 string, headers map[string]strin
 			}
 
 		}
-		if er == io.EOF {
+		if er == io.EOF || er == io.ErrUnexpectedEOF {
 			break
 		}
 		if er != nil {
