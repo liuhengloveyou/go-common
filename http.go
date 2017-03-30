@@ -1,6 +1,7 @@
 package common
 
 import (
+	"bufio"
 	"bytes"
 	"crypto/md5"
 	"errors"
@@ -31,6 +32,7 @@ func DownloadFile(url, dstpath, tmpath, fileMd5 string, headers map[string]strin
 	if dst, err = os.Create(tmpath); err != nil {
 		return nil, fmt.Errorf("create tmp file: %s", err.Error())
 	}
+	dstWriter := bufio.NewWriter(dst)
 
 	defer func() { // 删除临时文件
 		if dst != nil {
@@ -96,7 +98,7 @@ func DownloadFile(url, dstpath, tmpath, fileMd5 string, headers map[string]strin
 	for {
 		nr, er := response.Body.Read(buf)
 		if nr > 0 {
-			nw, ew := dst.Write(buf[0:nr])
+			nw, ew := dstWriter.Write(buf[0:nr])
 			if ew != nil {
 				err = ew
 				break
