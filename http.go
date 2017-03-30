@@ -92,12 +92,13 @@ func DownloadFile(url, dstpath, tmpath, fileMd5 string, headers map[string]strin
 
 	var contentLength int = int(response.ContentLength)
 	buf := make([]byte, 1024*1024)
+	n := 0
 
 	// download
 	for {
-
 		nr, er := io.ReadFull(response.Body, buf)
 		if nr > 0 {
+			n = n + nr
 			nw, ew := dstWriter.Write(buf[0:nr])
 			if ew != nil {
 				err = ew
@@ -108,7 +109,9 @@ func DownloadFile(url, dstpath, tmpath, fileMd5 string, headers map[string]strin
 				break
 			}
 
-			contentLength = contentLength - nr
+			if contentLength > 0 {
+				contentLength = contentLength - nr
+			}
 
 			// md5
 			if "" != fileMd5 {
@@ -136,8 +139,8 @@ func DownloadFile(url, dstpath, tmpath, fileMd5 string, headers map[string]strin
 		return response.Header, fmt.Errorf("close tmp file: %s", err.Error())
 	}
 
-	if contentLength > 0 {
-		return response.Header, errors.New("short body")
+	if contentLength != 0 && contentLength != -1 {
+		return response.Header, fmt.Errorf("short body %v %v", response.ContentLength, n)
 	}
 
 	// check md5
