@@ -47,8 +47,6 @@ func DownloadFile(url, dstpath, tmpath, fileMd5 string, headers map[string]strin
 		h = md5.New()
 	}
 
-	buf := make([]byte, 1024*1024)
-
 	// unix domain socket?
 	if strings.HasPrefix(url, "unix") {
 		urlfild := strings.Fields(url)
@@ -93,6 +91,7 @@ func DownloadFile(url, dstpath, tmpath, fileMd5 string, headers map[string]strin
 	}
 
 	var contentLength int = int(response.ContentLength)
+	buf := make([]byte, 1024*1024)
 
 	// download
 	for {
