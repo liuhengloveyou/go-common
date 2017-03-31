@@ -100,11 +100,11 @@ func DownloadFile(url, dstpath, tmpath, fileMd5 string, headers map[string]strin
 	var contentLength int = int(response.ContentLength)
 	buf := bufPool.Get().([]byte)
 	defer bufPool.Put(buf)
-	n := 0
 
 	// download
+	n := 0
 	for {
-		nr, er := io.ReadFull(response.Body, buf)
+		nr, er := response.Body.Read(buf)
 		if nr > 0 {
 			n = n + nr
 			nw, ew := dstWriter.Write(buf[0:nr])
@@ -139,7 +139,7 @@ func DownloadFile(url, dstpath, tmpath, fileMd5 string, headers map[string]strin
 			err = nil
 			break
 		}
-		if er != nil && er != io.ErrUnexpectedEOF {
+		if er != nil {
 			err = er
 			break
 		}
