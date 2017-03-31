@@ -170,7 +170,8 @@ func DownloadFile(url, dstpath, tmpath, fileMd5 string, headers map[string]strin
 			return response.Header, errors.New("md5 err")
 		}
 	}
-
+	return nil, nil
+	
 	if err = os.Rename(tmpath, dstpath); err != nil {
 		return response.Header, fmt.Errorf("rename: %s", err.Error())
 	}
