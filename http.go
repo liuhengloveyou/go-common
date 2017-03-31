@@ -32,7 +32,7 @@ func DownloadFile(url, dstpath, tmpath, fileMd5 string, headers map[string]strin
 		client *http.Client = http.DefaultClient
 	)
 
-	if err := os.MkdirAll(path.Dir(dstpath), 0755); err != nil {
+	if err = os.MkdirAll(path.Dir(dstpath), 0755); err != nil {
 		return nil, fmt.Errorf("create dst file: %s", err.Error())
 	}
 
@@ -117,7 +117,7 @@ func DownloadFile(url, dstpath, tmpath, fileMd5 string, headers map[string]strin
 				break
 			}
 
-			if contentLength > 0 {
+			if response.ContentLength > 0 {
 				contentLength = contentLength - nr
 			}
 
@@ -135,13 +135,17 @@ func DownloadFile(url, dstpath, tmpath, fileMd5 string, headers map[string]strin
 			}
 
 		}
-		if er == io.EOF || er == io.ErrUnexpectedEOF {
+		if er == io.EOF {
+			err = nil
 			break
 		}
-		if er != nil {
+		if er != nil && er != io.ErrUnexpectedEOF {
 			err = er
 			break
 		}
+	}
+	if err != nil {
+		return response.Header, fmt.Errorf("downloading file: %s", err.Error())
 	}
 	if err = dst.Close(); err != nil {
 		return response.Header, fmt.Errorf("close tmp file: %s", err.Error())
@@ -150,7 +154,11 @@ func DownloadFile(url, dstpath, tmpath, fileMd5 string, headers map[string]strin
 	if contentLength != 0 && contentLength != -1 {
 		return response.Header, fmt.Errorf("short body %v %v", response.ContentLength, n)
 	}
-
+	
+	if n == 0 {
+		return response.Header, fmt.Errorf("zero body %v", response.ContentLength)
+	}
+	
 	// check md5
 	if "" != fileMd5 {
 		nmd5 := fmt.Sprintf("%x", h.Sum(nil))
