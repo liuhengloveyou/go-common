@@ -14,7 +14,14 @@ import (
 	"os"
 	"path"
 	"strings"
+	"sync"
 )
+
+var bufPool = sync.Pool{
+	New: func() interface{} {
+		return make([]byte, 1024*1024)
+	},
+}
 
 // "unix socket http://host:port/uri"
 func DownloadFile(url, dstpath, tmpath, fileMd5 string, headers map[string]string) (http.Header, error) {
@@ -91,7 +98,8 @@ func DownloadFile(url, dstpath, tmpath, fileMd5 string, headers map[string]strin
 	}
 
 	var contentLength int = int(response.ContentLength)
-	buf := make([]byte, 1024*1024)
+	buf := bufPool.Get().([]byte)
+	defer bufPool.Put(buf)
 	n := 0
 
 	// download
