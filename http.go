@@ -19,7 +19,7 @@ import (
 
 var bufPool = sync.Pool{
 	New: func() interface{} {
-		return make([]byte, 1024*1024)
+		return make([]byte, 64*1024)
 	},
 }
 
@@ -35,7 +35,7 @@ func DownloadFile(url, dstpath, tmpath, fileMd5 string, headers map[string]strin
 	if err = os.MkdirAll(path.Dir(dstpath), 0755); err != nil {
 		return nil, fmt.Errorf("create dstdir file: %s", err.Error())
 	}
-	
+
 	if err = os.MkdirAll(path.Dir(tmpath), 0755); err != nil {
 		return nil, fmt.Errorf("create tmpdir file: %s", err.Error())
 	}
@@ -158,11 +158,11 @@ func DownloadFile(url, dstpath, tmpath, fileMd5 string, headers map[string]strin
 	if contentLength != 0 && contentLength != -1 {
 		return response.Header, fmt.Errorf("short body %v %v", response.ContentLength, n)
 	}
-	
+
 	if n == 0 {
 		return response.Header, fmt.Errorf("zero body %v", response.ContentLength)
 	}
-	
+
 	// check md5
 	if "" != fileMd5 {
 		nmd5 := fmt.Sprintf("%x", h.Sum(nil))
@@ -174,7 +174,7 @@ func DownloadFile(url, dstpath, tmpath, fileMd5 string, headers map[string]strin
 			return response.Header, errors.New("md5 err")
 		}
 	}
-	
+
 	if err = os.Rename(tmpath, dstpath); err != nil {
 		return response.Header, fmt.Errorf("rename: %s", err.Error())
 	}
