@@ -187,7 +187,7 @@ func DownloadFile(url, dstpath, tmpath, fileMd5 string, headers map[string]strin
 		return response.Header, errors.New("download err")
 	}
 
-	if response.ContentLength > 0 && dstStat.Size() != response.ContentLength {
+	if response.ContentLength >= 0 && dstStat.Size() != response.ContentLength {
 		return response.Header, fmt.Errorf("size err: %s %d %d", dstpath, response.ContentLength, dstStat.Size())
 	}
 
