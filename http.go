@@ -28,7 +28,7 @@ func DownloadFile(url, dstpath, tmpath, fileMd5 string, headers map[string]strin
 	var (
 		err    error
 		h      hash.Hash
-		dst    *os.File
+		tmpDst *os.File
 		client *http.Client = http.DefaultClient
 	)
 
@@ -40,14 +40,14 @@ func DownloadFile(url, dstpath, tmpath, fileMd5 string, headers map[string]strin
 		return nil, fmt.Errorf("create tmpdir file: %s", err.Error())
 	}
 
-	if dst, err = os.Create(tmpath); err != nil {
+	if tmpDst, err = os.Create(tmpath); err != nil {
 		return nil, fmt.Errorf("create tmp file: %s", err.Error())
 	}
-	dstWriter := bufio.NewWriter(dst)
+	dstWriter := bufio.NewWriter(tmpDst)
 
 	defer func() { // 删除临时文件
-		if dst != nil {
-			_ = dst.Close()
+		if tmpDst != nil {
+			_ = tmpDst.Close()
 		}
 		if _, err := os.Stat(tmpath); err == nil || os.IsExist(err) {
 			_ = os.Remove(tmpath)
@@ -151,7 +151,10 @@ func DownloadFile(url, dstpath, tmpath, fileMd5 string, headers map[string]strin
 	if err != nil {
 		return response.Header, fmt.Errorf("downloading file: %s", err.Error())
 	}
-	if err = dst.Close(); err != nil {
+	if err = dstWriter.Flush(); err != nil {
+		return response.Header, fmt.Errorf("flush tmp file: %s", err.Error())
+	}
+	if err = tmpDst.Close(); err != nil {
 		return response.Header, fmt.Errorf("close tmp file: %s", err.Error())
 	}
 
@@ -179,8 +182,13 @@ func DownloadFile(url, dstpath, tmpath, fileMd5 string, headers map[string]strin
 		return response.Header, fmt.Errorf("rename: %s", err.Error())
 	}
 
-	if _, err = os.Stat(dstpath); err != nil && os.IsNotExist(err) {
+	dstStat, err := os.Stat(dstpath)
+	if err != nil && os.IsNotExist(err) {
 		return response.Header, errors.New("download err")
+	}
+
+	if response.ContentLength > 0 && dstStat.Size() != response.ContentLength {
+		return response.Header, fmt.Errorf("size err: %s %d %d", dstpath, response.ContentLength, dstStat.Size())
 	}
 
 	return response.Header, nil
