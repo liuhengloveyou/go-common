@@ -15,6 +15,7 @@ import (
 	"path"
 	"strings"
 	"sync"
+	"time"
 )
 
 var bufPool = sync.Pool{
@@ -71,6 +72,10 @@ func DownloadFile(url, dstpath, tmpath, fileMd5 string, headers map[string]strin
 				Dial: func(proto, addr string) (conn net.Conn, err error) {
 					return net.Dial("unix", urlfild[1])
 				},
+				MaxIdleConns:          100,
+				IdleConnTimeout:       90 * time.Second,
+				TLSHandshakeTimeout:   10 * time.Second,
+				ExpectContinueTimeout: 1 * time.Second,
 			},
 		}
 	}
@@ -90,6 +95,8 @@ func DownloadFile(url, dstpath, tmpath, fileMd5 string, headers map[string]strin
 			request.Header.Set(k, v)
 		}
 	}
+
+	client.Timeout = 1 * time.Hour
 
 	// request
 	response, err := client.Do(request)
@@ -186,7 +193,6 @@ func DownloadFile(url, dstpath, tmpath, fileMd5 string, headers map[string]strin
 	if err != nil && os.IsNotExist(err) {
 		return response.Header, errors.New("download err")
 	}
-
 	if response.ContentLength >= 0 && dstStat.Size() != response.ContentLength {
 		return response.Header, fmt.Errorf("size err: %s %d %d", dstpath, response.ContentLength, dstStat.Size())
 	}
