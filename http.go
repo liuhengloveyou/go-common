@@ -18,6 +18,13 @@ import (
 	"time"
 )
 
+const ONEMBYTE = 1 * 1024 * 1024
+
+const (
+	MD5MODEALL = iota
+	MD5MODE1M  /*文件长度+每隔100M取开始1M+文件尾1M*/
+)
+
 var bufPool = sync.Pool{
 	New: func() interface{} {
 		return make([]byte, 64*1024)
@@ -25,12 +32,14 @@ var bufPool = sync.Pool{
 }
 
 // "unix socket http://host:port/uri"
-func DownloadFile(url, dstpath, tmpath, fileMd5 string, headers map[string]string) (http.Header, error) {
+func DownloadFile(url, dstpath, tmpath, fileMd5 string, headers map[string]string, md5mode int) (http.Header, error) {
 	var (
-		err    error
-		h      hash.Hash
-		tmpDst *os.File
-		client *http.Client = http.DefaultClient
+		err      error
+		n        int64
+		h        hash.Hash
+		tmpDst   *os.File
+		client   *http.Client = http.DefaultClient
+		lastonem []byte
 	)
 
 	if err = os.MkdirAll(path.Dir(dstpath), 0755); err != nil {
@@ -54,10 +63,6 @@ func DownloadFile(url, dstpath, tmpath, fileMd5 string, headers map[string]strin
 			_ = os.Remove(tmpath)
 		}
 	}()
-
-	if "" != fileMd5 {
-		h = md5.New()
-	}
 
 	// unix domain socket?
 	if strings.HasPrefix(url, "unix") {
@@ -108,17 +113,24 @@ func DownloadFile(url, dstpath, tmpath, fileMd5 string, headers map[string]strin
 		return response.Header, fmt.Errorf("http.StatusCode: %d", response.StatusCode)
 	}
 
-	var contentLength int = int(response.ContentLength)
+	var contentLength int64 = response.ContentLength
 	buf := bufPool.Get().([]byte)
 	defer bufPool.Put(buf)
 
+	if "" != fileMd5 {
+		h = md5.New()
+
+		if MD5MODE1M == md5mode {
+			io.WriteString(h, fmt.Sprintf("%d", contentLength)) // 文件长度
+		}
+	}
+
 	// download
-	n := 0
 	for {
 		nr, er := response.Body.Read(buf)
 		if nr > 0 {
-			n = n + nr
-			nw, ew := dstWriter.Write(buf[0:nr])
+			n = n + int64(nr)
+			nw, ew := dstWriter.Write(buf[:nr])
 			if ew != nil {
 				err = ew
 				break
@@ -129,19 +141,37 @@ func DownloadFile(url, dstpath, tmpath, fileMd5 string, headers map[string]strin
 			}
 
 			if response.ContentLength > 0 {
-				contentLength = contentLength - nr
+				contentLength = contentLength - int64(nr)
 			}
 
 			// md5
 			if "" != fileMd5 {
-				nh, eh := h.Write(buf[0:nr])
-				if eh != nil {
-					err = eh
-					break
-				}
-				if nh != nr {
-					err = io.ErrShortWrite
-					break
+				if MD5MODEALL == md5mode {
+					h.Write(buf[0:nr])
+				} else if MD5MODE1M == md5mode {
+					s, e := 0, nr
+
+					// 最后1M
+					if response.ContentLength-n <= ONEMBYTE {
+						if response.ContentLength-ONEMBYTE > 0 {
+							if n-(response.ContentLength-ONEMBYTE) < int64(nr) {
+								s = int(int64(nr) - (n - (response.ContentLength - ONEMBYTE)))
+							}
+						}
+
+						lastonem = append(lastonem, buf[s:nr]...)
+					}
+
+					// 每100M取第1M
+					if (n-int64(nr))%(100*ONEMBYTE) >= 0 && (n-int64(nr))%(100*ONEMBYTE) < ONEMBYTE {
+						if n%(100*ONEMBYTE) < int64(nr) {
+							s = nr - int(n%(100*ONEMBYTE))
+						}
+						if n%(100*ONEMBYTE) >= ONEMBYTE {
+							e = e - int(n%(100*ONEMBYTE)-ONEMBYTE)
+						}
+						h.Write(buf[s:e])
+					}
 				}
 			}
 
@@ -175,6 +205,10 @@ func DownloadFile(url, dstpath, tmpath, fileMd5 string, headers map[string]strin
 
 	// check md5
 	if "" != fileMd5 {
+		if md5mode == MD5MODE1M {
+			h.Write(lastonem[:])
+		}
+
 		nmd5 := fmt.Sprintf("%x", h.Sum(nil))
 		if fileMd5 != nmd5 {
 			if e := os.Remove(tmpath); e != nil {
