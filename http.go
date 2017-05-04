@@ -149,10 +149,10 @@ func DownloadFile(url, dstpath, tmpath, fileMd5 string, headers map[string]strin
 				if MD5MODEALL == md5mode {
 					h.Write(buf[0:nr])
 				} else if MD5MODE1M == md5mode {
-					s, e := 0, nr
-
 					// 最后1M
 					if response.ContentLength-n <= ONEMBYTE {
+						s := 0
+
 						if response.ContentLength-ONEMBYTE > 0 {
 							if n-(response.ContentLength-ONEMBYTE) < int64(nr) {
 								s = int(int64(nr) - (n - (response.ContentLength - ONEMBYTE)))
@@ -164,6 +164,8 @@ func DownloadFile(url, dstpath, tmpath, fileMd5 string, headers map[string]strin
 
 					// 每100M取第1M
 					if (n-int64(nr))%(100*ONEMBYTE) >= 0 && (n-int64(nr))%(100*ONEMBYTE) < ONEMBYTE {
+						s, e := 0, nr
+
 						if n%(100*ONEMBYTE) < int64(nr) {
 							s = nr - int(n%(100*ONEMBYTE))
 						}
