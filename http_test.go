@@ -11,6 +11,11 @@ import (
 	common "github.com/liuhengloveyou/go-common"
 )
 
+func TestGetRequest(t *testing.T) {
+	h, c, b, e := common.GetRequest("http://e.hiphotos.baidu.com/image/pic/item/a1ec08fa513d2697e54749d557fbb2fb4216d8a6.jp", nil)
+	fmt.Println(h, c, b, e)
+}
+
 func TestDownload(t *testing.T) {
 	/*
 		m := md5.New()

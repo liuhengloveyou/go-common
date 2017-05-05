@@ -109,7 +109,7 @@ func DownloadFile(url, dstpath, tmpath, fileMd5 string, headers map[string]strin
 		return nil, fmt.Errorf("http.Do: %s", err.Error())
 	}
 	defer response.Body.Close()
-	if response.StatusCode != http.StatusOK {
+	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
 		return response.Header, fmt.Errorf("http.StatusCode: %d", response.StatusCode)
 	}
 
@@ -279,37 +279,37 @@ func PostRequest(res string, body []byte, headers *map[string]string, cookies []
 	return
 }
 
-func GetRequest(res string, headers *map[string]string) (statusCode int, responseCookies []*http.Cookie, body []byte, err error) {
-	if res == "" {
-		return 0, nil, nil, errors.New("url nil")
-	}
-
-	request, err := http.NewRequest("GET", res, nil)
+func GetRequest(url string, headers map[string]string) (header http.Header, responseCookies []*http.Cookie, body []byte, err error) {
+	request, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		return 0, nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	// header
-	request.Header.Add("Content-Type", "text/html")
 	if headers != nil {
-		for k, v := range *headers {
-			request.Header.Add(k, v)
+		for k, v := range headers {
+			if k == "Host" {
+				request.Host = v
+				continue
+			}
+			request.Header.Set(k, v)
 		}
 	}
 
 	// request
+	http.DefaultClient.Timeout = 1 * time.Hour
 	response, err := http.DefaultClient.Do(request)
 	if err != nil {
-		return 0, nil, nil, err
+		return nil, nil, nil, err
 	}
 	defer response.Body.Close()
 
 	body, err = ioutil.ReadAll(response.Body)
 	if err != nil {
-		return 0, nil, nil, err
+		return nil, nil, nil, err
 	}
 
-	return response.StatusCode, response.Cookies(), body, nil
+	return response.Header, response.Cookies(), body, nil
 }
 
 func HttpErr(w http.ResponseWriter, statCode int, message string) {
