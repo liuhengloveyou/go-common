@@ -217,7 +217,7 @@ func DownloadFile(url, dstpath, tmpath, fileMd5 string, headers map[string]strin
 				return response.Header, e
 			}
 
-			return response.Header, errors.New("md5 err")
+			return response.Header, fmt.Errorf("md5 err: %s", nmd5)
 		}
 	}
 
