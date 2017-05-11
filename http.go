@@ -114,6 +114,10 @@ func DownloadFile(url, dstpath, tmpath, fileMd5 string, headers map[string]strin
 	}
 
 	var contentLength int64 = response.ContentLength
+	if contentLength < 0 {
+		return response.Header, errors.New("unknown contentlength")
+	}
+
 	buf := bufPool.Get().([]byte)
 	defer bufPool.Put(buf)
 
@@ -188,21 +192,24 @@ func DownloadFile(url, dstpath, tmpath, fileMd5 string, headers map[string]strin
 		}
 	}
 	if err != nil {
-		return response.Header, fmt.Errorf("downloading file: %s", err.Error())
+		return response.Header, fmt.Errorf("downloading file %d: %s", n, err.Error())
 	}
-	if err = dstWriter.Flush(); err != nil {
-		return response.Header, fmt.Errorf("flush tmp file: %s", err.Error())
-	}
-	if err = tmpDst.Close(); err != nil {
-		return response.Header, fmt.Errorf("close tmp file: %s", err.Error())
-	}
-
 	if contentLength != 0 && contentLength != -1 {
 		return response.Header, fmt.Errorf("short body %v %v", response.ContentLength, n)
 	}
 
 	if n == 0 {
 		return response.Header, fmt.Errorf("zero body %v", response.ContentLength)
+	}
+	if n != response.ContentLength {
+		return response.Header, fmt.Errorf("read %d", n)
+	}
+
+	if err = dstWriter.Flush(); err != nil {
+		return response.Header, fmt.Errorf("flush tmp file: %s", err.Error())
+	}
+	if err = tmpDst.Close(); err != nil {
+		return response.Header, fmt.Errorf("close tmp file: %s", err.Error())
 	}
 
 	// check md5
