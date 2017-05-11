@@ -31,15 +31,44 @@ var bufPool = sync.Pool{
 	},
 }
 
+func md51m(f *os.File) (string, error) {
+	m := md5.New()
+	b := make([]byte, ONEMBYTE)
+
+	fs, err := f.Stat()
+	if err != nil {
+		return "", err
+	}
+
+	io.WriteString(m, fmt.Sprintf("%d", fs.Size()))
+
+	var i int64
+	for ; i <= (fs.Size() / (100 * ONEMBYTE)); i++ {
+		f.Seek(i*100*ONEMBYTE, 0)
+		n, _ := f.Read(b)
+		m.Write(b[:n])
+	}
+
+	si := fs.Size() - ONEMBYTE
+	if si < 0 {
+		si = 0
+	}
+	f.Seek(si, 0)
+
+	n, _ := f.Read(b)
+	m.Write(b[0:n])
+
+	return fmt.Sprintf("%x", m.Sum(nil)), nil
+}
+
 // "unix socket http://host:port/uri"
 func DownloadFile(url, dstpath, tmpath, fileMd5 string, headers map[string]string, md5mode int) (http.Header, error) {
 	var (
-		err      error
-		n        int64
-		h        hash.Hash
-		tmpDst   *os.File
-		client   *http.Client = http.DefaultClient
-		lastonem []byte
+		err    error
+		n      int64
+		h      hash.Hash
+		tmpDst *os.File
+		client *http.Client = http.DefaultClient
 	)
 
 	if err = os.MkdirAll(path.Dir(dstpath), 0755); err != nil {
@@ -56,12 +85,8 @@ func DownloadFile(url, dstpath, tmpath, fileMd5 string, headers map[string]strin
 	dstWriter := bufio.NewWriter(tmpDst)
 
 	defer func() { // 删除临时文件
-		if tmpDst != nil {
-			_ = tmpDst.Close()
-		}
-		if _, err := os.Stat(tmpath); err == nil || os.IsExist(err) {
-			_ = os.Remove(tmpath)
-		}
+		tmpDst.Close()
+		os.Remove(tmpath)
 	}()
 
 	// unix domain socket?
@@ -123,10 +148,6 @@ func DownloadFile(url, dstpath, tmpath, fileMd5 string, headers map[string]strin
 
 	if "" != fileMd5 {
 		h = md5.New()
-
-		if MD5MODE1M == md5mode {
-			io.WriteString(h, fmt.Sprintf("%d", contentLength)) // 文件长度
-		}
 	}
 
 	// download
@@ -149,36 +170,8 @@ func DownloadFile(url, dstpath, tmpath, fileMd5 string, headers map[string]strin
 			}
 
 			// md5
-			if "" != fileMd5 {
-				if MD5MODEALL == md5mode {
-					h.Write(buf[0:nr])
-				} else if MD5MODE1M == md5mode {
-					// 最后1M
-					if response.ContentLength-n <= ONEMBYTE {
-						s := 0
-
-						if response.ContentLength-ONEMBYTE > 0 {
-							if n-(response.ContentLength-ONEMBYTE) < int64(nr) {
-								s = int(int64(nr) - (n - (response.ContentLength - ONEMBYTE)))
-							}
-						}
-
-						lastonem = append(lastonem, buf[s:nr]...)
-					}
-
-					// 每100M取第1M
-					if (n-int64(nr))%(100*ONEMBYTE) >= 0 && (n-int64(nr))%(100*ONEMBYTE) < ONEMBYTE {
-						s, e := 0, nr
-
-						if n%(100*ONEMBYTE) < int64(nr) {
-							s = nr - int(n%(100*ONEMBYTE))
-						}
-						if n%(100*ONEMBYTE) >= ONEMBYTE {
-							e = e - int(n%(100*ONEMBYTE)-ONEMBYTE)
-						}
-						h.Write(buf[s:e])
-					}
-				}
+			if "" != fileMd5 && MD5MODEALL == md5mode {
+				h.Write(buf[0:nr])
 			}
 
 		}
@@ -194,6 +187,10 @@ func DownloadFile(url, dstpath, tmpath, fileMd5 string, headers map[string]strin
 	if err != nil {
 		return response.Header, fmt.Errorf("downloading file %d: %s", n, err.Error())
 	}
+	if err = dstWriter.Flush(); err != nil {
+		return response.Header, fmt.Errorf("flush tmp file: %s", err.Error())
+	}
+
 	if contentLength != 0 && contentLength != -1 {
 		return response.Header, fmt.Errorf("short body %v %v", response.ContentLength, n)
 	}
@@ -205,27 +202,24 @@ func DownloadFile(url, dstpath, tmpath, fileMd5 string, headers map[string]strin
 		return response.Header, fmt.Errorf("read %d", n)
 	}
 
-	if err = dstWriter.Flush(); err != nil {
-		return response.Header, fmt.Errorf("flush tmp file: %s", err.Error())
-	}
-	if err = tmpDst.Close(); err != nil {
-		return response.Header, fmt.Errorf("close tmp file: %s", err.Error())
-	}
-
 	// check md5
 	if "" != fileMd5 {
-		if md5mode == MD5MODE1M {
-			h.Write(lastonem[:])
+		nmd5 := ""
+		if md5mode == MD5MODEALL {
+			nmd5 = fmt.Sprintf("%x", h.Sum(nil))
+		} else if md5mode == MD5MODE1M {
+			if nmd5, err = md51m(tmpDst); err != nil {
+				return response.Header, fmt.Errorf("md5 err: %s", err.Error())
+			}
 		}
 
-		nmd5 := fmt.Sprintf("%x", h.Sum(nil))
 		if fileMd5 != nmd5 {
-			if e := os.Remove(tmpath); e != nil {
-				return response.Header, e
-			}
-
 			return response.Header, fmt.Errorf("md5 err: %s", nmd5)
 		}
+	}
+
+	if err = tmpDst.Close(); err != nil {
+		return response.Header, fmt.Errorf("close tmp file: %s", err.Error())
 	}
 
 	if err = os.Rename(tmpath, dstpath); err != nil {
