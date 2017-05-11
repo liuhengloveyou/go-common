@@ -319,6 +319,34 @@ func GetRequest(url string, headers map[string]string) (header http.Header, resp
 	return response.Header, response.Cookies(), body, nil
 }
 
+func HeadRequest(url string, headers map[string]string) (header http.Header, responseCookies []*http.Cookie, err error) {
+	request, err := http.NewRequest("HEAD", url, nil)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// header
+	if headers != nil {
+		for k, v := range headers {
+			if k == "Host" {
+				request.Host = v
+				continue
+			}
+			request.Header.Set(k, v)
+		}
+	}
+
+	// request
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	response.Body.Close()
+
+	return response.Header, response.Cookies(), nil
+}
+
 func HttpErr(w http.ResponseWriter, statCode int, message string) {
 	w.Header().Set("content-type", "application/json")
 	w.WriteHeader(statCode)
