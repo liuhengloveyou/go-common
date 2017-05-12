@@ -313,7 +313,7 @@ func GetRequest(url string, headers map[string]string) (header http.Header, resp
 	return response.Header, response.Cookies(), body, nil
 }
 
-func HeadRequest(url string, headers map[string]string) (header http.Header, responseCookies []*http.Cookie, err error) {
+func HeadRequest(url string, headers map[string]string) (response *http.Response, err error) {
 	request, err := http.NewRequest("HEAD", url, nil)
 	if err != nil {
 		return nil, nil, err
@@ -338,7 +338,7 @@ func HeadRequest(url string, headers map[string]string) (header http.Header, res
 
 	response.Body.Close()
 
-	return response.Header, response.Cookies(), nil
+	return response, nil
 }
 
 func HttpErr(w http.ResponseWriter, statCode int, message string) {
