@@ -331,7 +331,7 @@ func HeadRequest(url string, headers map[string]string) (response *http.Response
 	}
 
 	// request
-	response, err := http.DefaultClient.Do(request)
+	response, err = http.DefaultClient.Do(request)
 	if err != nil {
 		return nil, err
 	}
