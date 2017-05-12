@@ -316,7 +316,7 @@ func GetRequest(url string, headers map[string]string) (header http.Header, resp
 func HeadRequest(url string, headers map[string]string) (response *http.Response, err error) {
 	request, err := http.NewRequest("HEAD", url, nil)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	// header
@@ -333,7 +333,7 @@ func HeadRequest(url string, headers map[string]string) (response *http.Response
 	// request
 	response, err := http.DefaultClient.Do(request)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	response.Body.Close()
