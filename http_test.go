@@ -28,7 +28,7 @@ func TestDownload(t *testing.T) {
 	fmt.Println(">>>", resp.ContentLength, fmd5)
 
 	wr, err := common.DownloadFile("http://e.hiphotos.baidu.com/image/pic/item/a1ec08fa513d2697e54749d557fbb2fb4216d8a6.jpg",
-		"/tmp/a/b/c/aaa.jpg", "/tmp/bbb/ccc/ddd", fmd5, nil, common.MD5MODE1M)
+		"/tmp/a/b/c/aaa.jpg", "/tmp/bbb/ccc/ddd", fmd5, nil, func(header http.Header) error { fmt.Println("hook: ", header); return nil }, common.MD5MODE1M)
 	fmt.Printf("%#v; %v\n\n", wr, err)
 
 	/*

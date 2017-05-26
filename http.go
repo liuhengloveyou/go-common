@@ -62,7 +62,7 @@ func md51m(f *os.File) (string, error) {
 }
 
 // "unix socket http://host:port/uri"
-func DownloadFile(url, dstpath, tmpath, fileMd5 string, headers map[string]string, md5mode int) (http.Header, error) {
+func DownloadFile(url, dstpath, tmpath, fileMd5 string, headers map[string]string, headerHook func(http.Header) error, md5mode int) (http.Header, error) {
 	var (
 		err    error
 		n      int64
@@ -141,6 +141,12 @@ func DownloadFile(url, dstpath, tmpath, fileMd5 string, headers map[string]strin
 	var contentLength int64 = response.ContentLength
 	if contentLength < 0 {
 		return response.Header, errors.New("unknown contentlength")
+	}
+
+	if headerHook != nil {
+		if err = headerHook(response.Header); err != nil {
+			return response.Header, err
+		}
 	}
 
 	buf := bufPool.Get().([]byte)
