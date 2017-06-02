@@ -18,11 +18,11 @@ import (
 	"time"
 )
 
-const ONEMBYTE = 1 * 1024 * 1024
+const ONEPIECE = 10 * 1024
 
 const (
 	MD5MODEALL = iota
-	MD5MODE1M  /*文件长度+每隔100M取开始1M+文件尾1M*/
+	MD5MODE1M  /*文件长度+每隔1M取开始10K+文件尾10K*/
 )
 
 var bufPool = sync.Pool{
@@ -31,9 +31,9 @@ var bufPool = sync.Pool{
 	},
 }
 
-func md51m(f *os.File) (string, error) {
+func Md51m(f *os.File) (string, error) {
 	m := md5.New()
-	b := make([]byte, ONEMBYTE)
+	b := make([]byte, ONEPIECE)
 
 	fs, err := f.Stat()
 	if err != nil {
@@ -43,20 +43,31 @@ func md51m(f *os.File) (string, error) {
 	io.WriteString(m, fmt.Sprintf("%d", fs.Size()))
 
 	var i int64
-	for ; i <= (fs.Size() / (100 * ONEMBYTE)); i++ {
-		f.Seek(i*100*ONEMBYTE, 0)
-		n, _ := f.Read(b)
-		m.Write(b[:n])
+	for ; i <= (fs.Size() / (100 * ONEPIECE)); i++ {
+		f.Seek(i*100*ONEPIECE, 0)
+		n, e := f.Read(b)
+		if e != nil && e != io.EOF {
+			return "", e
+		}
+		if n > 0 {
+			m.Write(b[:n])
+		}
+
 	}
 
-	si := fs.Size() - ONEMBYTE
+	si := fs.Size() - ONEPIECE
 	if si < 0 {
 		si = 0
 	}
 	f.Seek(si, 0)
 
-	n, _ := f.Read(b)
-	m.Write(b[0:n])
+	n, e := f.Read(b)
+	if e != nil && e != io.EOF {
+		return "", e
+	}
+	if n > 0 {
+		m.Write(b[:n])
+	}
 
 	return fmt.Sprintf("%x", m.Sum(nil)), nil
 }
@@ -214,7 +225,7 @@ func DownloadFile(url, dstpath, tmpath, fileMd5 string, headers map[string]strin
 		if md5mode == MD5MODEALL {
 			nmd5 = fmt.Sprintf("%x", h.Sum(nil))
 		} else if md5mode == MD5MODE1M {
-			if nmd5, err = md51m(tmpDst); err != nil {
+			if nmd5, err = Md51m(tmpDst); err != nil {
 				return response.Header, fmt.Errorf("md5 err: %s", err.Error())
 			}
 		}
