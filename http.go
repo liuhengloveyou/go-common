@@ -300,7 +300,7 @@ func PostRequest(res string, body []byte, headers *map[string]string, cookies []
 func GetRequest(url string, headers map[string]string) (header *http.Response, body []byte, err error) {
 	request, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
 
 	// header
@@ -318,13 +318,13 @@ func GetRequest(url string, headers map[string]string) (header *http.Response, b
 	http.DefaultClient.Timeout = 1 * time.Hour
 	response, err := http.DefaultClient.Do(request)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
 	defer response.Body.Close()
 
 	body, err = ioutil.ReadAll(response.Body)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
 
 	return response, body, nil
