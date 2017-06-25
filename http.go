@@ -72,7 +72,7 @@ func Md51m(f *os.File) (string, error) {
 	return fmt.Sprintf("%x", m.Sum(nil)), nil
 }
 
-// "unix socket http://host:port/uri"
+// "unix\nsocket\nhttp://host:port/uri"
 func DownloadFile(url, dstpath, tmpath, fileMd5 string, headers map[string]string, headerHook func(http.Header) error, md5mode int) (http.Header, error) {
 	var (
 		err    error
@@ -102,7 +102,7 @@ func DownloadFile(url, dstpath, tmpath, fileMd5 string, headers map[string]strin
 
 	// unix domain socket?
 	if strings.HasPrefix(url, "unix") {
-		urlfild := strings.Fields(url)
+		urlfild := strings.Split(url, "\n")
 		if len(urlfild) != 3 {
 			return nil, errors.New("url err")
 		}
