@@ -297,7 +297,7 @@ func PostRequest(res string, body []byte, headers *map[string]string, cookies []
 	return
 }
 
-func GetRequest(url string, headers map[string]string) (header *http.Response, body []byte, err error) {
+func GetRequest(url string, headers map[string]string) (resp *http.Response, body []byte, err error) {
 	request, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, nil, err
@@ -315,7 +315,7 @@ func GetRequest(url string, headers map[string]string) (header *http.Response, b
 	}
 
 	// request
-	http.DefaultClient.Timeout = 1 * time.Hour
+	http.DefaultClient.Timeout = 1 * time.Minute
 	response, err := http.DefaultClient.Do(request)
 	if err != nil {
 		return nil, nil, err
