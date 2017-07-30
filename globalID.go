@@ -1,6 +1,8 @@
 package common
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"sync"
 	"time"
@@ -47,4 +49,14 @@ func (p *GlobalID) LogicClock(clock int64) int64 {
 	}
 
 	return p.moment
+}
+
+func (p *GlobalID) UUID() (string, error) {
+	b := make([]byte, 24)
+	n, err := rand.Read(b)
+	if n != len(b) || err != nil {
+		return "", fmt.Errorf("Could not successfully read from the system CSPRNG.")
+	}
+
+	return hex.EncodeToString(b), nil
 }
