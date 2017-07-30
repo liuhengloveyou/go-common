@@ -33,7 +33,7 @@ func AesCBCEncrypt(msg, key string) (string, error) {
 
 	blockModel.CryptBlocks(ciphertext, plantText)
 
-	return base64.StdEncoding.EncodeToString(ciphertext), nil
+	return base64.RawStdEncoding.EncodeToString(ciphertext), nil
 }
 
 //解密字符串
@@ -45,7 +45,7 @@ func AesCBCDecrypt(msg, key string) (rst string, err error) {
 		}
 	}()
 
-	rmsg, err := base64.StdEncoding.DecodeString(msg)
+	rmsg, err := base64.RawStdEncoding.DecodeString(msg)
 	if err != nil {
 		return "", err
 	}
