@@ -254,9 +254,9 @@ func DownloadFile(url, dstpath, tmpath, fileMd5 string, headers map[string]strin
 	return response.Header, nil
 }
 
-func PostRequest(url string, body []byte, headers *map[string]string, cookies []*http.Cookie) (response *http.Response, err error) {
+func PostRequest(url string, body []byte, headers *map[string]string, cookies []*http.Cookie) (response *http.Response, respBody []byte, err error) {
 	if url == "" {
-		return nil, errors.New("url nil.")
+		return nil, nil, errors.New("url nil.")
 	}
 
 	// body
@@ -264,7 +264,7 @@ func PostRequest(url string, body []byte, headers *map[string]string, cookies []
 	requestReader := io.MultiReader(bodyBuff)
 	request, err := http.NewRequest("POST", url, requestReader)
 	if err != nil {
-		return nil, err
+		return
 	}
 
 	// cookies
@@ -284,11 +284,17 @@ func PostRequest(url string, body []byte, headers *map[string]string, cookies []
 	}
 
 	// request
+	http.DefaultClient.Timeout = 5 * time.Second
 	response, err = http.DefaultClient.Do(request)
 	if err != nil {
-		return nil, err
+		return
 	}
 	defer response.Body.Close()
+
+	respBody, err = ioutil.ReadAll(response.Body)
+	if err != nil {
+		return
+	}
 
 	return
 }
