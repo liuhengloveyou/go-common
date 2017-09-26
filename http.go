@@ -363,7 +363,7 @@ func HeadRequest(url string, headers map[string]string) (response *http.Response
 func HttpErr(w http.ResponseWriter, statCode int, message string) {
 	w.Header().Set("content-type", "application/json")
 	w.WriteHeader(statCode)
-	if _, e := fmt.Fprintf(w, "{\"message\":\"%s\"}", message); e != nil {
+	if _, e := fmt.Fprintf(w, "{\"msg\":\"%s\"}", message); e != nil {
 		panic(e)
 	}
 	w.(http.Flusher).Flush()
