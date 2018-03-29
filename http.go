@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"crypto/md5"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"hash"
@@ -360,11 +361,28 @@ func HeadRequest(url string, headers map[string]string) (response *http.Response
 	return response, nil
 }
 
-func HttpErr(w http.ResponseWriter, statCode int, message string) {
+func HttpErr(w http.ResponseWriter, statCode int, errno int, message interface{}) error {
 	w.Header().Set("content-type", "application/json")
 	w.WriteHeader(statCode)
-	if _, e := fmt.Fprintf(w, "{\"msg\":\"%s\"}", message); e != nil {
-		panic(e)
+
+	defer w.(http.Flusher).Flush()
+
+	if errno != 0 {
+		if _, e := fmt.Fprintf(w, "{\"errcode\":%d,\"errmsg\":\"%s\"}", errno, message); e != nil {
+			return e
+		}
+	} else {
+		resp := struct {
+			ErrCode int         `json:"errcode"`
+			ErrMsg  string      `json:"errmsg"`
+			Data    interface{} `json:"data"`
+		}{0, "", message}
+
+		b, _ := json.Marshal(resp)
+		if _, e := w.Write(b); e != nil {
+			return e
+		}
 	}
-	w.(http.Flusher).Flush()
+
+	return nil
 }
