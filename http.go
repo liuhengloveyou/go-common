@@ -10,6 +10,7 @@ import (
 	"hash"
 	"io"
 	"io/ioutil"
+	"log"
 	"net"
 	"net/http"
 	"os"
@@ -19,8 +20,11 @@ import (
 	"time"
 )
 
-const ONEPIECE = 10 * 1024
+// 上传接口把文件放在哪个目录
+var UploadDir string
 
+// 文件下载
+const ONEPIECE = 10 * 1024
 const (
 	MD5MODEALL = iota
 	MD5MODE1M  /*文件长度+每隔1M取开始10K+文件尾10K*/
@@ -253,6 +257,51 @@ func DownloadFile(url, dstpath, tmpath, fileMd5 string, headers map[string]strin
 	}
 
 	return response.Header, nil
+}
+
+func FileUpload(w http.ResponseWriter, r *http.Request) {
+	if UploadDir == "" {
+		panic("文件上传存放到哪？")
+	}
+
+	if r.Method != "POST" {
+		HttpErr(w, http.StatusMethodNotAllowed, -1, "必须是POST")
+		return
+	}
+
+	r.ParseMultipartForm(32 << 20)
+
+	file, h, err := r.FormFile("file")
+	if err != nil {
+		log.Println("FileUpload err: ", err)
+		HttpErr(w, http.StatusInternalServerError, -1, err.Error())
+		return
+	}
+	defer file.Close()
+
+	fileBuff, err := ioutil.ReadAll(file)
+	if err != nil {
+		log.Println("upload err: ", err)
+		HttpErr(w, http.StatusInternalServerError, -1, err.Error())
+		return
+	}
+
+	fp := fmt.Sprintf("%s%x%s", UploadDir, md5.Sum(fileBuff), path.Ext(h.Filename))
+
+	// 是否已经存在
+	if false == IsExists(fp) {
+		if ioutil.WriteFile(fp, fileBuff, 0755) != nil {
+			log.Println("FileUpload err: ", err)
+			HttpErr(w, http.StatusInternalServerError, -1, err.Error())
+			return
+		}
+	}
+
+	log.Println("FileUpload ok: ", fp)
+
+	HttpErr(w, http.StatusOK, 0, fmt.Sprintf("%x%s", md5.Sum(fileBuff), path.Ext(h.Filename)))
+
+	return
 }
 
 func PostRequest(url string, body []byte, headers *map[string]string, cookies []*http.Cookie) (response *http.Response, respBody []byte, err error) {
