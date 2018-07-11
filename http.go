@@ -3,6 +3,7 @@ package common
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"crypto/md5"
 	"encoding/json"
 	"errors"
@@ -78,31 +79,40 @@ func Md51m(f *os.File) (string, error) {
 }
 
 // "unix\nsocket\nhttp://host:port/uri"
-func DownloadFile(url, dstpath, tmpath, fileMd5 string, headers map[string]string, headerHook func(http.Header) error, md5mode int) (http.Header, error) {
+func DownloadFile(ctx context.Context, url, dstpath, tmpath, fileMd5 string, headers map[string]string, headerHook func(http.Header) error, md5mode int) (http.Header, error) {
 	var (
-		err    error
-		n      int64
-		h      hash.Hash
-		tmpDst *os.File
-		client *http.Client = http.DefaultClient
+		err       error
+		n         int64
+		h         hash.Hash
+		tmpDst    *os.File
+		dstWriter *bufio.Writer
 	)
 
-	if err = os.MkdirAll(path.Dir(dstpath), 0755); err != nil {
-		return nil, fmt.Errorf("create dstdir file: %s", err.Error())
+	client := http.DefaultClient
+
+	if dstpath != "" {
+		if err = os.MkdirAll(path.Dir(dstpath), 0755); err != nil {
+			return nil, fmt.Errorf("create dstdir file: %s", err.Error())
+		}
 	}
 
-	if err = os.MkdirAll(path.Dir(tmpath), 0755); err != nil {
-		return nil, fmt.Errorf("create tmpdir file: %s", err.Error())
+	if tmpath != "" {
+		if err = os.MkdirAll(path.Dir(tmpath), 0755); err != nil {
+			return nil, fmt.Errorf("create tmpdir file: %s", err.Error())
+		}
+
+		if tmpDst, err = os.Create(tmpath); err != nil {
+			return nil, fmt.Errorf("create tmp file: %s", err.Error())
+		}
+		dstWriter = bufio.NewWriter(tmpDst)
 	}
 
-	if tmpDst, err = os.Create(tmpath); err != nil {
-		return nil, fmt.Errorf("create tmp file: %s", err.Error())
-	}
-	dstWriter := bufio.NewWriter(tmpDst)
-
-	defer func() { // 删除临时文件
-		tmpDst.Close()
-		os.Remove(tmpath)
+	// 删除临时文件
+	defer func() {
+		if dstpath != "" && tmpath != "" {
+			tmpDst.Close()
+			os.Remove(tmpath)
+		}
 	}()
 
 	// unix domain socket?
@@ -150,21 +160,22 @@ func DownloadFile(url, dstpath, tmpath, fileMd5 string, headers map[string]strin
 		return nil, fmt.Errorf("http.Do: %s", err.Error())
 	}
 	defer response.Body.Close()
+
+	// 处理头信息
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
 		return response.Header, fmt.Errorf("http.StatusCode: %d", response.StatusCode)
 	}
 
-	var contentLength int64 = response.ContentLength
-	if contentLength < 0 {
-		return response.Header, errors.New("unknown contentlength")
+	if response.ContentLength < 0 {
+		return response.Header, errors.New("unknown ContentLength")
 	}
-
 	if headerHook != nil {
 		if err = headerHook(response.Header); err != nil {
 			return response.Header, err
 		}
 	}
 
+	// 读Body
 	buf := bufPool.Get().([]byte)
 	defer bufPool.Put(buf)
 
@@ -174,9 +185,20 @@ func DownloadFile(url, dstpath, tmpath, fileMd5 string, headers map[string]strin
 
 	// download
 	for {
-		nr, er := response.Body.Read(buf)
-		if nr > 0 {
-			n = n + int64(nr)
+		var nr int
+		var er error
+
+		time.Sleep(time.Second)
+
+		select {
+		case <-ctx.Done():
+			goto CANCEL
+		default:
+			nr, er = response.Body.Read(buf)
+		}
+
+		n = n + int64(nr)
+		if nr > 0 && dstWriter != nil {
 			nw, ew := dstWriter.Write(buf[:nr])
 			if ew != nil {
 				err = ew
@@ -185,10 +207,6 @@ func DownloadFile(url, dstpath, tmpath, fileMd5 string, headers map[string]strin
 			if nr != nw {
 				err = io.ErrShortWrite
 				break
-			}
-
-			if response.ContentLength > 0 {
-				contentLength = contentLength - int64(nr)
 			}
 
 			// md5
@@ -206,21 +224,20 @@ func DownloadFile(url, dstpath, tmpath, fileMd5 string, headers map[string]strin
 			break
 		}
 	}
+CANCEL:
 	if err != nil {
 		return response.Header, fmt.Errorf("downloading file %d: %s", n, err.Error())
 	}
-	if err = dstWriter.Flush(); err != nil {
-		return response.Header, fmt.Errorf("flush tmp file: %s", err.Error())
+
+	if dstWriter != nil {
+		if err = dstWriter.Flush(); err != nil {
+			return response.Header, fmt.Errorf("flush tmp file: %s", err.Error())
+		}
 	}
 
-	if contentLength != 0 && contentLength != -1 {
-		return response.Header, fmt.Errorf("short body %v %v", response.ContentLength, n)
-	}
-
-	if n == 0 {
-		return response.Header, fmt.Errorf("zero body %v", response.ContentLength)
-	}
+	// 没有读完
 	if n != response.ContentLength {
+		response.Header.Set("Readn", fmt.Sprintf("%d", n))
 		return response.Header, fmt.Errorf("read %d", n)
 	}
 
@@ -240,20 +257,22 @@ func DownloadFile(url, dstpath, tmpath, fileMd5 string, headers map[string]strin
 		}
 	}
 
-	if err = tmpDst.Close(); err != nil {
-		return response.Header, fmt.Errorf("close tmp file: %s", err.Error())
-	}
+	if dstpath != "" && tmpath != "" {
+		if err = tmpDst.Close(); err != nil {
+			return response.Header, fmt.Errorf("close tmp file: %s", err.Error())
+		}
 
-	if err = os.Rename(tmpath, dstpath); err != nil {
-		return response.Header, fmt.Errorf("rename: %s", err.Error())
-	}
+		if err = os.Rename(tmpath, dstpath); err != nil {
+			return response.Header, fmt.Errorf("rename: %s", err.Error())
+		}
 
-	dstStat, err := os.Stat(dstpath)
-	if err != nil && os.IsNotExist(err) {
-		return response.Header, errors.New("download err")
-	}
-	if response.ContentLength >= 0 && dstStat.Size() != response.ContentLength {
-		return response.Header, fmt.Errorf("size err: %s %d %d", dstpath, response.ContentLength, dstStat.Size())
+		dstStat, err := os.Stat(dstpath)
+		if err != nil && os.IsNotExist(err) {
+			return response.Header, errors.New("download err")
+		}
+		if response.ContentLength >= 0 && dstStat.Size() != response.ContentLength {
+			return response.Header, fmt.Errorf("size err: %s %d %d", dstpath, response.ContentLength, dstStat.Size())
+		}
 	}
 
 	return response.Header, nil
