@@ -165,30 +165,24 @@ func DownloadFile(ctx context.Context, url, dstpath, tmpath, fileMd5 string, hea
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
 		return response.Header, fmt.Errorf("http.StatusCode: %d", response.StatusCode)
 	}
-
-	if response.ContentLength < 0 {
-		return response.Header, errors.New("unknown ContentLength")
-	}
 	if headerHook != nil {
 		if err = headerHook(response.Header); err != nil {
 			return response.Header, err
 		}
 	}
 
-	// 读Body
-	buf := bufPool.Get().([]byte)
-	defer bufPool.Put(buf)
-
 	if "" != fileMd5 {
 		h = md5.New()
 	}
+
+	// 读Body
+	buf := bufPool.Get().([]byte)
+	defer bufPool.Put(buf)
 
 	// download
 	for {
 		var nr int
 		var er error
-
-		time.Sleep(time.Second)
 
 		select {
 		case <-ctx.Done():
@@ -213,7 +207,6 @@ func DownloadFile(ctx context.Context, url, dstpath, tmpath, fileMd5 string, hea
 			if "" != fileMd5 && MD5MODEALL == md5mode {
 				h.Write(buf[0:nr])
 			}
-
 		}
 		if er == io.EOF {
 			err = nil
@@ -229,16 +222,15 @@ CANCEL:
 		return response.Header, fmt.Errorf("downloading file %d: %s", n, err.Error())
 	}
 
+	// 没有读完
+	if n != response.ContentLength {
+		response.Header.Set("Readn", fmt.Sprintf("%d", n))
+	}
+
 	if dstWriter != nil {
 		if err = dstWriter.Flush(); err != nil {
 			return response.Header, fmt.Errorf("flush tmp file: %s", err.Error())
 		}
-	}
-
-	// 没有读完
-	if n != response.ContentLength {
-		response.Header.Set("Readn", fmt.Sprintf("%d", n))
-		return response.Header, fmt.Errorf("read %d", n)
 	}
 
 	// check md5
