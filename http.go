@@ -165,6 +165,7 @@ func DownloadFile(ctx context.Context, url, dstpath, tmpath, fileMd5 string, hea
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
 		return response.Header, fmt.Errorf("http.StatusCode: %d", response.StatusCode)
 	}
+	response.Header.Set("Statuscode", fmt.Sprintf("%d", response.StatusCode))
 	if headerHook != nil {
 		if err = headerHook(response.Header); err != nil {
 			return response.Header, err
@@ -218,13 +219,10 @@ func DownloadFile(ctx context.Context, url, dstpath, tmpath, fileMd5 string, hea
 		}
 	}
 CANCEL:
+	response.Header.Set("Readn", fmt.Sprintf("%d", n)) // 有没读完?
+
 	if err != nil {
 		return response.Header, fmt.Errorf("downloading file %d: %s", n, err.Error())
-	}
-
-	// 没有读完
-	if n != response.ContentLength {
-		response.Header.Set("Readn", fmt.Sprintf("%d", n))
 	}
 
 	if dstWriter != nil {
@@ -315,14 +313,19 @@ func FileUpload(w http.ResponseWriter, r *http.Request) {
 	return
 }
 
-func PostRequest(url string, body []byte, headers *map[string]string, cookies []*http.Cookie) (response *http.Response, respBody []byte, err error) {
+func PostRequest(url string, headers map[string]string, cookies []*http.Cookie, body ...[]byte) (response *http.Response, respBody []byte, err error) {
 	if url == "" {
 		return nil, nil, errors.New("url nil.")
 	}
 
 	// body
-	bodyBuff := bytes.NewBuffer(body)
-	requestReader := io.MultiReader(bodyBuff)
+	contentLength := 0
+	readers := make([]io.Reader, len(body))
+	for i := 0; i < len(body); i++ {
+		readers[i] = bytes.NewBuffer(body[i])
+		contentLength = contentLength + len(body[i])
+	}
+	requestReader := io.MultiReader(readers...)
 	request, err := http.NewRequest("POST", url, requestReader)
 	if err != nil {
 		return
@@ -336,10 +339,9 @@ func PostRequest(url string, body []byte, headers *map[string]string, cookies []
 	}
 
 	// header
-	request.Header.Add("Content-Type", "text/html")
-	request.ContentLength = int64(bodyBuff.Len())
-	if headers != nil {
-		for k, v := range *headers {
+	request.ContentLength = int64(contentLength)
+	if len(headers) > 0 {
+		for k, v := range headers {
 			request.Header.Add(k, v)
 		}
 	}
@@ -385,9 +387,11 @@ func GetRequest(url string, headers map[string]string) (resp *http.Response, bod
 	}
 	defer response.Body.Close()
 
-	body, err = ioutil.ReadAll(response.Body)
-	if err != nil {
-		return nil, nil, err
+	if response.StatusCode >= 200 && response.StatusCode < 300 {
+		body, err = ioutil.ReadAll(response.Body)
+		if err != nil {
+			return nil, nil, err
+		}
 	}
 
 	return response, body, nil
