@@ -113,12 +113,6 @@ func (p *Downloader) Download(ctx context.Context) (header http.Header, err erro
 
 	client := http.DefaultClient
 
-	if p.DstPath != "" {
-		if err = os.MkdirAll(path.Dir(p.DstPath), 0755); err != nil {
-			return nil, fmt.Errorf("create dstdir file: %s", err.Error())
-		}
-	}
-
 	if p.TmPath != "" {
 		if err = os.MkdirAll(path.Dir(p.TmPath), 0755); err != nil {
 			return nil, fmt.Errorf("create tmpdir file: %s", err.Error())
@@ -128,6 +122,19 @@ func (p *Downloader) Download(ctx context.Context) (header http.Header, err erro
 			return nil, fmt.Errorf("create tmp file: %s", err.Error())
 		}
 		dstWriter = bufio.NewWriter(tmpDst)
+	}
+
+	if p.DstPath != "" {
+		if err = os.MkdirAll(path.Dir(p.DstPath), 0755); err != nil {
+			return nil, fmt.Errorf("create dstdir file: %s", err.Error())
+		}
+
+		if dstWriter == nil {
+			if tmpDst, err = os.Create(p.DstPath); err != nil {
+				return nil, fmt.Errorf("create dst file: %s", err.Error())
+			}
+			dstWriter = bufio.NewWriter(tmpDst)
+		}
 	}
 
 	// 删除临时文件
