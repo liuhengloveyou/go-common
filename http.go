@@ -21,15 +21,39 @@ import (
 	"time"
 )
 
-// 上传接口把文件放在哪个目录
-var UploadDir string
-
 // 文件下载
 const ONEPIECE = 10 * 1024
 const (
 	MD5MODEALL = iota
 	MD5MODE1M  /*文件长度+每隔1M取开始10K+文件尾10K*/
 )
+
+type Downloader struct {
+	Headers    map[string]string
+	HeaderHook func(http.Header) error
+
+	URL     string
+	DstPath string
+	TmPath  string
+
+	MD5     string
+	MD5mode int
+
+	// 间隔多少秒打印下载日志; 0表示结束时打; -1不打
+	LogMode int64
+	LogHook func(nn, n int64)
+
+	// 下载了多少字节
+	N, nn int64
+
+	// 有没有读到EOF
+	EOF bool
+
+	StatusCode int
+}
+
+// 上传接口把文件放在哪个目录
+var UploadDir string
 
 var bufPool = sync.Pool{
 	New: func() interface{} {
@@ -79,29 +103,28 @@ func Md51m(f *os.File) (string, error) {
 }
 
 // "unix\nsocket\nhttp://host:port/uri"
-func DownloadFile(ctx context.Context, url, dstpath, tmpath, fileMd5 string, headers map[string]string, headerHook func(http.Header) error, md5mode int) (http.Header, error) {
+func (p *Downloader) Download(ctx context.Context) (header http.Header, err error) {
 	var (
-		err       error
-		n         int64
-		h         hash.Hash
-		tmpDst    *os.File
-		dstWriter *bufio.Writer
+		lastLogTime int64
+		h           hash.Hash
+		tmpDst      *os.File
+		dstWriter   *bufio.Writer
 	)
 
 	client := http.DefaultClient
 
-	if dstpath != "" {
-		if err = os.MkdirAll(path.Dir(dstpath), 0755); err != nil {
+	if p.DstPath != "" {
+		if err = os.MkdirAll(path.Dir(p.DstPath), 0755); err != nil {
 			return nil, fmt.Errorf("create dstdir file: %s", err.Error())
 		}
 	}
 
-	if tmpath != "" {
-		if err = os.MkdirAll(path.Dir(tmpath), 0755); err != nil {
+	if p.TmPath != "" {
+		if err = os.MkdirAll(path.Dir(p.TmPath), 0755); err != nil {
 			return nil, fmt.Errorf("create tmpdir file: %s", err.Error())
 		}
 
-		if tmpDst, err = os.Create(tmpath); err != nil {
+		if tmpDst, err = os.Create(p.TmPath); err != nil {
 			return nil, fmt.Errorf("create tmp file: %s", err.Error())
 		}
 		dstWriter = bufio.NewWriter(tmpDst)
@@ -109,20 +132,20 @@ func DownloadFile(ctx context.Context, url, dstpath, tmpath, fileMd5 string, hea
 
 	// 删除临时文件
 	defer func() {
-		if dstpath != "" && tmpath != "" {
+		if p.DstPath != "" && p.TmPath != "" {
 			tmpDst.Close()
-			os.Remove(tmpath)
+			os.Remove(p.TmPath)
 		}
 	}()
 
 	// unix domain socket?
-	if strings.HasPrefix(url, "unix") {
-		urlfild := strings.Split(url, "\n")
+	if strings.HasPrefix(p.URL, "unix") {
+		urlfild := strings.Split(p.URL, "\n")
 		if len(urlfild) != 3 {
 			return nil, errors.New("url err")
 		}
 
-		url = urlfild[2]
+		p.URL = urlfild[2]
 		client = &http.Client{
 			Transport: &http.Transport{
 				Dial: func(proto, addr string) (conn net.Conn, err error) {
@@ -136,14 +159,15 @@ func DownloadFile(ctx context.Context, url, dstpath, tmpath, fileMd5 string, hea
 		}
 	}
 
-	request, err := http.NewRequest("GET", url, nil)
+	request, err := http.NewRequest("GET", p.URL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("http.NewRequest: %s", err.Error())
 	}
+	request = request.WithContext(ctx)
 
 	// header
-	if headers != nil {
-		for k, v := range headers {
+	if p.Headers != nil {
+		for k, v := range p.Headers {
 			if k == "Host" {
 				request.Host = v
 				continue
@@ -155,8 +179,8 @@ func DownloadFile(ctx context.Context, url, dstpath, tmpath, fileMd5 string, hea
 	client.Timeout = 1 * time.Hour
 
 	// request
-	response, err := client.Do(request)
-	if err != nil {
+	var response *http.Response
+	if response, err = client.Do(request); err != nil {
 		return nil, fmt.Errorf("http.Do: %s", err.Error())
 	}
 	defer response.Body.Close()
@@ -165,14 +189,14 @@ func DownloadFile(ctx context.Context, url, dstpath, tmpath, fileMd5 string, hea
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
 		return response.Header, fmt.Errorf("http.StatusCode: %d", response.StatusCode)
 	}
-	response.Header.Set("Statuscode", fmt.Sprintf("%d", response.StatusCode))
-	if headerHook != nil {
-		if err = headerHook(response.Header); err != nil {
+	p.StatusCode = response.StatusCode
+	if p.HeaderHook != nil {
+		if err = p.HeaderHook(response.Header); err != nil {
 			return response.Header, err
 		}
 	}
 
-	if "" != fileMd5 {
+	if "" != p.MD5 {
 		h = md5.New()
 	}
 
@@ -182,17 +206,15 @@ func DownloadFile(ctx context.Context, url, dstpath, tmpath, fileMd5 string, hea
 
 	// download
 	for {
-		var nr int
-		var er error
+		nr, er := response.Body.Read(buf)
+		p.N, p.nn = p.N+int64(nr), p.nn+int64(nr)
 
-		select {
-		case <-ctx.Done():
-			goto CANCEL
-		default:
-			nr, er = response.Body.Read(buf)
+		nt := time.Now().Unix()
+		if p.LogHook != nil && ((p.LogMode > 0 && nt%p.LogMode == 0 && nt != lastLogTime) || er != nil) {
+			p.LogHook(p.nn, p.N)
+			p.nn, lastLogTime = 0, nt
 		}
 
-		n = n + int64(nr)
 		if nr > 0 && dstWriter != nil {
 			nw, ew := dstWriter.Write(buf[:nr])
 			if ew != nil {
@@ -205,24 +227,19 @@ func DownloadFile(ctx context.Context, url, dstpath, tmpath, fileMd5 string, hea
 			}
 
 			// md5
-			if "" != fileMd5 && MD5MODEALL == md5mode {
+			if p.MD5 != "" && MD5MODEALL == p.MD5mode {
 				h.Write(buf[0:nr])
 			}
 		}
-		if er == io.EOF {
-			err = nil
-			break
-		}
+
 		if er != nil {
 			err = er
 			break
 		}
 	}
-CANCEL:
-	response.Header.Set("Readn", fmt.Sprintf("%d", n)) // 有没读完?
 
-	if err != nil {
-		return response.Header, fmt.Errorf("downloading file %d: %s", n, err.Error())
+	if err != nil && err != io.EOF && err != context.DeadlineExceeded && err != context.Canceled {
+		return response.Header, fmt.Errorf("downloading file %d: %s", p.N, err.Error())
 	}
 
 	if dstWriter != nil {
@@ -232,36 +249,36 @@ CANCEL:
 	}
 
 	// check md5
-	if "" != fileMd5 {
+	if "" != p.MD5 {
 		nmd5 := ""
-		if md5mode == MD5MODEALL {
+		if p.MD5mode == MD5MODEALL {
 			nmd5 = fmt.Sprintf("%x", h.Sum(nil))
-		} else if md5mode == MD5MODE1M {
+		} else if p.MD5mode == MD5MODE1M {
 			if nmd5, err = Md51m(tmpDst); err != nil {
 				return response.Header, fmt.Errorf("md5 err: %s", err.Error())
 			}
 		}
 
-		if fileMd5 != nmd5 {
+		if p.MD5 != nmd5 {
 			return response.Header, fmt.Errorf("md5 err: %s", nmd5)
 		}
 	}
 
-	if dstpath != "" && tmpath != "" {
+	if p.DstPath != "" && p.TmPath != "" {
 		if err = tmpDst.Close(); err != nil {
 			return response.Header, fmt.Errorf("close tmp file: %s", err.Error())
 		}
 
-		if err = os.Rename(tmpath, dstpath); err != nil {
+		if err = os.Rename(p.TmPath, p.DstPath); err != nil {
 			return response.Header, fmt.Errorf("rename: %s", err.Error())
 		}
 
-		dstStat, err := os.Stat(dstpath)
+		dstStat, err := os.Stat(p.DstPath)
 		if err != nil && os.IsNotExist(err) {
 			return response.Header, errors.New("download err")
 		}
 		if response.ContentLength >= 0 && dstStat.Size() != response.ContentLength {
-			return response.Header, fmt.Errorf("size err: %s %d %d", dstpath, response.ContentLength, dstStat.Size())
+			return response.Header, fmt.Errorf("size err: %s %d %d", p.DstPath, response.ContentLength, dstStat.Size())
 		}
 	}
 
@@ -380,7 +397,7 @@ func GetRequest(url string, headers map[string]string) (resp *http.Response, bod
 	}
 
 	// request
-	http.DefaultClient.Timeout = 1 * time.Minute
+	http.DefaultClient.Timeout = 10 * time.Second
 	response, err := http.DefaultClient.Do(request)
 	if err != nil {
 		return nil, nil, err
