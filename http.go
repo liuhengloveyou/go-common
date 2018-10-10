@@ -45,11 +45,6 @@ type Downloader struct {
 
 	// 下载了多少字节
 	N, nn int64
-
-	// 有没有读到EOF
-	EOF bool
-
-	StatusCode int
 }
 
 // 上传接口把文件放在哪个目录
@@ -103,7 +98,7 @@ func Md51m(f *os.File) (string, error) {
 }
 
 // "unix\nsocket\nhttp://host:port/uri"
-func (p *Downloader) Download(ctx context.Context) (header http.Header, err error) {
+func (p *Downloader) Download(ctx context.Context) (resp *http.Response, err error) {
 	var (
 		lastLogTime int64
 		h           hash.Hash
@@ -194,12 +189,12 @@ func (p *Downloader) Download(ctx context.Context) (header http.Header, err erro
 
 	// 处理头信息
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
-		return response.Header, fmt.Errorf("http.StatusCode: %d", response.StatusCode)
+		return response, fmt.Errorf("http.StatusCode: %d", response.StatusCode)
 	}
-	p.StatusCode = response.StatusCode
+
 	if p.HeaderHook != nil {
 		if err = p.HeaderHook(response.Header); err != nil {
-			return response.Header, err
+			return response, err
 		}
 	}
 
@@ -246,12 +241,12 @@ func (p *Downloader) Download(ctx context.Context) (header http.Header, err erro
 	}
 
 	if err != nil && err != io.EOF && err != context.DeadlineExceeded && err != context.Canceled {
-		return response.Header, fmt.Errorf("downloading file %d: %s", p.N, err.Error())
+		return response, fmt.Errorf("downloading file %d: %s", p.N, err.Error())
 	}
 
 	if dstWriter != nil {
 		if err = dstWriter.Flush(); err != nil {
-			return response.Header, fmt.Errorf("flush tmp file: %s", err.Error())
+			return response, fmt.Errorf("flush tmp file: %s", err.Error())
 		}
 	}
 
@@ -262,34 +257,34 @@ func (p *Downloader) Download(ctx context.Context) (header http.Header, err erro
 			nmd5 = fmt.Sprintf("%x", h.Sum(nil))
 		} else if p.MD5mode == MD5MODE1M {
 			if nmd5, err = Md51m(tmpDst); err != nil {
-				return response.Header, fmt.Errorf("md5 err: %s", err.Error())
+				return response, fmt.Errorf("md5 err: %s", err.Error())
 			}
 		}
 
 		if p.MD5 != nmd5 {
-			return response.Header, fmt.Errorf("md5 err: %s", nmd5)
+			return response, fmt.Errorf("md5 err: %s", nmd5)
 		}
 	}
 
 	if p.DstPath != "" && p.TmPath != "" {
 		if err = tmpDst.Close(); err != nil {
-			return response.Header, fmt.Errorf("close tmp file: %s", err.Error())
+			return response, fmt.Errorf("close tmp file: %s", err.Error())
 		}
 
 		if err = os.Rename(p.TmPath, p.DstPath); err != nil {
-			return response.Header, fmt.Errorf("rename: %s", err.Error())
+			return response, fmt.Errorf("rename: %s", err.Error())
 		}
 
 		dstStat, err := os.Stat(p.DstPath)
 		if err != nil && os.IsNotExist(err) {
-			return response.Header, errors.New("download err")
+			return response, errors.New("download err")
 		}
 		if response.ContentLength >= 0 && dstStat.Size() != response.ContentLength {
-			return response.Header, fmt.Errorf("size err: %s %d %d", p.DstPath, response.ContentLength, dstStat.Size())
+			return response, fmt.Errorf("size err: %s %d %d", p.DstPath, response.ContentLength, dstStat.Size())
 		}
 	}
 
-	return response.Header, nil
+	return response, nil
 }
 
 func FileUpload(w http.ResponseWriter, r *http.Request) {
