@@ -14,6 +14,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/http/httptrace"
 	"os"
 	"path"
 	"strings"
@@ -38,6 +39,8 @@ type Downloader struct {
 
 	MD5     string
 	MD5mode int
+
+	Trace *httptrace.ClientTrace
 
 	// 间隔多少秒打印下载日志; 0表示结束时打; -1不打
 	LogMode int64
@@ -166,6 +169,9 @@ func (p *Downloader) Download(ctx context.Context) (resp *http.Response, err err
 		return nil, fmt.Errorf("http.NewRequest: %s", err.Error())
 	}
 	request = request.WithContext(ctx)
+	if p.Trace != nil {
+		request = request.WithContext(httptrace.WithClientTrace(request.Context(), p.Trace))
+	}
 
 	// header
 	if p.Headers != nil {
