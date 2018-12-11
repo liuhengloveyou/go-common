@@ -28,6 +28,12 @@ const (
 	MD5MODE1M  /*文件长度+每隔1M取开始10K+文件尾10K*/
 )
 
+type HttpErrMsg struct {
+	Code int         `json:"code"`
+	Msg  interface{} `json:"errmsg,omitempty"`
+	Data interface{} `json:"data,omitempty"`
+}
+
 type Downloader struct {
 	Headers    map[string]string
 	HeaderHook func(http.Header) error
@@ -292,6 +298,10 @@ func FileUpload(w http.ResponseWriter, r *http.Request) {
 		panic("文件上传存放到哪？")
 	}
 
+	if !strings.HasSuffix(UploadDir, "/") {
+		UploadDir = UploadDir + "/"
+	}
+
 	if r.Method != "POST" {
 		HttpErr(w, http.StatusMethodNotAllowed, -1, "必须是POST")
 		return
@@ -444,28 +454,21 @@ func HeadRequest(url string, headers map[string]string) (response *http.Response
 	return response, nil
 }
 
-func HttpErr(w http.ResponseWriter, statCode int, errno int, message interface{}) error {
-	w.Header().Set("content-type", "application/json")
-	w.WriteHeader(statCode)
-
+func HttpErr(w http.ResponseWriter, code, errno int, data interface{}) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.WriteHeader(code)
 	defer w.(http.Flusher).Flush()
 
+	errMsg := HttpErrMsg{Code: errno}
 	if errno != 0 {
-		if _, e := fmt.Fprintf(w, "{\"errcode\":%d,\"errmsg\":\"%s\"}", errno, message); e != nil {
-			return e
-		}
+		errMsg.Msg = data
 	} else {
-		resp := struct {
-			ErrCode int         `json:"errcode"`
-			ErrMsg  string      `json:"errmsg"`
-			Data    interface{} `json:"data"`
-		}{0, "", message}
-
-		b, _ := json.Marshal(resp)
-		if _, e := w.Write(b); e != nil {
-			return e
-		}
+		errMsg.Data = data
 	}
 
-	return nil
+	b, _ := json.Marshal(errMsg)
+	w.Write(b)
+
+	return
 }

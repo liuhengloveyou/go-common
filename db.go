@@ -2,7 +2,6 @@ package common
 
 import (
 	"database/sql"
-	"encoding/json"
 	"fmt"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -21,18 +20,8 @@ type DBConf struct {
 	DSN    string `json:"dsn"`
 }
 
-func InitDBPool(conf interface{}, pool interface{}) (err error) {
-	var dbs []DBConf
-	var byteConf []byte
-
-	if byteConf, err = json.Marshal(conf); err != nil {
-		return
-	}
-	if err = json.Unmarshal(byteConf, &dbs); err != nil {
-		return
-	}
-
-	for _, db := range dbs {
+func InitDBPool(conf []DBConf, pool interface{}) (err error) {
+	for _, db := range conf {
 		switch db.NGType {
 		case "xorm":
 			pool.(map[string]*xorm.Engine)[db.Name], err = xorm.NewEngine(db.DBType, db.DSN)
@@ -54,8 +43,8 @@ func InitDBPool(conf interface{}, pool interface{}) (err error) {
 
 func (this *DBmysql) Query(sqlStr string, args ...interface{}) (rst []map[string]string, err error) {
 	var (
-		stmt *sql.Stmt = nil
-		rows *sql.Rows = nil
+		stmt *sql.Stmt
+		rows *sql.Rows
 	)
 
 	stmt, err = this.Conn.Prepare(sqlStr)
