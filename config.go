@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"os"
 
-	"github.com/BurntSushi/toml"
+	"gopkg.in/yaml.v2"
 )
 
 func LoadJsonConfig(fn string, config interface{}) error {
@@ -22,10 +22,15 @@ func LoadJsonConfig(fn string, config interface{}) error {
 	return nil
 }
 
-func LoadTomlConfig(fn string, config interface{}) error {
-	if _, err := toml.DecodeFile(fn, config); err != nil {
+func LoadYamlConfig(fn string, config interface{}) (err error) {
+	r, err := os.Open(fn)
+	if err != nil {
 		return err
 	}
+	defer r.Close()
 
-	return nil
+	decoder := yaml.NewDecoder(r)
+	err = decoder.Decode(config)
+
+	return
 }

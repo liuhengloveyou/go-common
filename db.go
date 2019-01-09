@@ -2,10 +2,8 @@ package common
 
 import (
 	"database/sql"
-	"fmt"
 
 	_ "github.com/go-sql-driver/mysql"
-	"github.com/go-xorm/xorm"
 )
 
 type DBmysql struct {
@@ -14,31 +12,14 @@ type DBmysql struct {
 }
 
 type DBConf struct {
-	Name   string `json:"name"`
-	NGType string `json:"ng_type"`
 	DBType string `json:"db_type"`
 	DSN    string `json:"dsn"`
 }
 
-func InitDBPool(conf []DBConf, pool interface{}) (err error) {
-	for _, db := range conf {
-		switch db.NGType {
-		case "xorm":
-			pool.(map[string]*xorm.Engine)[db.Name], err = xorm.NewEngine(db.DBType, db.DSN)
-		case "mysql":
-			DBConn := &DBmysql{DSN: db.DSN}
-			DBConn.Conn, err = sql.Open(db.DBType, db.DSN)
-			pool.(map[string]*DBmysql)[db.Name] = DBConn
-		default:
-			return fmt.Errorf("未知的ng_type: %v", db.NGType)
-		}
-
-		if err != nil {
-			return
-		}
-	}
-
-	return nil
+func InitMysql(conf DBConf) (db *DBmysql, err error) {
+	conn, err := sql.Open(conf.DBType, conf.DSN)
+	db = &DBmysql{DSN: conf.DSN, Conn: conn}
+	return db, err
 }
 
 func (this *DBmysql) Query(sqlStr string, args ...interface{}) (rst []map[string]string, err error) {
