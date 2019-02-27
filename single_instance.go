@@ -7,13 +7,13 @@ import (
 )
 
 func SingleInstane(pidfile string) {
-	if e := lockPidFile(pidfile); e != nil {
+	if e := LockPidFile(pidfile); e != nil {
 		pid, _ := ioutil.ReadFile(pidfile)
 		panic(fmt.Errorf("Already run: [%v]; ERR: %v", string(pid), e.Error()))
 	}
 }
 
-func lockPidFile(pidfile string) error {
+func LockPidFile(pidfile string) error {
 	fd, e := syscall.Open(pidfile, syscall.O_CREAT|syscall.O_RDWR, 0777)
 	if e != nil {
 		return e
