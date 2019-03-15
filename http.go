@@ -415,7 +415,7 @@ func GetRequest(url string, headers map[string]string) (resp *http.Response, bod
 	}
 
 	// request
-	http.DefaultClient.Timeout = 10 * time.Second
+	http.DefaultClient.Timeout = 100 * time.Second
 	response, err := http.DefaultClient.Do(request)
 	if err != nil {
 		return nil, nil, err

@@ -7,34 +7,47 @@ import (
 )
 
 func SingleInstane(pidfile string) {
-	if e := LockPidFile(pidfile); e != nil {
+	if _, e := LockPidFile(pidfile); e != nil {
 		pid, _ := ioutil.ReadFile(pidfile)
 		panic(fmt.Errorf("Already run: [%v]; ERR: %v", string(pid), e.Error()))
 	}
 }
 
-func LockPidFile(pidfile string) error {
-	fd, e := syscall.Open(pidfile, syscall.O_CREAT|syscall.O_RDWR, 0777)
+func LockPidFile(pidfile string) (fd int, e error) {
+	fd, e = syscall.Open(pidfile, syscall.O_CREAT|syscall.O_RDWR, 0777)
 	if e != nil {
-		return e
+		return
 	}
 
 	e = syscall.Flock(fd, syscall.LOCK_NB|syscall.LOCK_EX)
 	if e != nil {
-		return e
+		return
 	}
 
 	e = syscall.Ftruncate(fd, 0)
 	if e != nil {
-		return e
+		return
 	}
 
 	_, e = syscall.Write(fd, []byte(fmt.Sprintf("%d", syscall.Getpid())))
 	if e != nil {
-		return e
+		return
 	}
 
-	return nil
+	return
+}
+
+
+func UnLockFile(fd int) (e error) {
+	if e = syscall.Flock(fd, syscall.LOCK_UN); e != nil {
+		return
+	}
+
+	if e = syscall.Close(fd); e != nil {
+		return
+	}
+
+	return
 }
 
 /*
