@@ -478,3 +478,11 @@ func HttpErr(w http.ResponseWriter, code, errno int, data interface{}) {
 
 	return
 }
+
+func UnmarshalHttpResponse(data []byte, v interface{}) error {
+	rst := HttpErrMsg{
+		Data: v,
+	}
+
+	return json.Unmarshal(data, &rst)
+}
