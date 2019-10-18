@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/md5"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -15,6 +16,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptrace"
+	"net/url"
 	"os"
 	"path"
 	"strings"
@@ -39,9 +41,11 @@ type Downloader struct {
 	Headers    map[string]string
 	HeaderHook func(http.Header) error
 
-	URL     string
-	DstPath string
-	TmPath  string
+	URL       string
+	ProxyUrl  string
+	ProxyAuth string // "user:password"
+	DstPath   string
+	TmPath    string
 
 	MD5     string
 	MD5mode int
@@ -117,6 +121,18 @@ func (p *Downloader) Download(ctx context.Context) (resp *http.Response, err err
 
 	client := http.DefaultClient
 
+	// 目标文件路径不能为空
+	if p.DstPath == "" {
+		return nil, fmt.Errorf("DstPath nil")
+	}
+	if err = os.MkdirAll(path.Dir(p.DstPath), 0755); err != nil {
+		return nil, fmt.Errorf("create dstdir file: %s", err.Error())
+	}
+	if tmpDst, err = os.Create(p.DstPath); err != nil {
+		return nil, fmt.Errorf("create dst file: %s", err.Error())
+	}
+	dstWriter = bufio.NewWriter(tmpDst)
+
 	if p.TmPath != "" {
 		if err = os.MkdirAll(path.Dir(p.TmPath), 0755); err != nil {
 			return nil, fmt.Errorf("create tmpdir file: %s", err.Error())
@@ -128,24 +144,15 @@ func (p *Downloader) Download(ctx context.Context) (resp *http.Response, err err
 		dstWriter = bufio.NewWriter(tmpDst)
 	}
 
-	if p.DstPath != "" {
-		if err = os.MkdirAll(path.Dir(p.DstPath), 0755); err != nil {
-			return nil, fmt.Errorf("create dstdir file: %s", err.Error())
-		}
-
-		if dstWriter == nil {
-			if tmpDst, err = os.Create(p.DstPath); err != nil {
-				return nil, fmt.Errorf("create dst file: %s", err.Error())
-			}
-			dstWriter = bufio.NewWriter(tmpDst)
-		}
-	}
-
-	// 删除临时文件
+	// 线束删除临时文件
+	// 出错要删除已经下载的文件
 	defer func() {
 		if p.DstPath != "" && p.TmPath != "" {
 			tmpDst.Close()
 			os.Remove(p.TmPath)
+		}
+		if err != nil {
+			os.Remove(p.DstPath)
 		}
 	}()
 
@@ -170,9 +177,22 @@ func (p *Downloader) Download(ctx context.Context) (resp *http.Response, err err
 		}
 	}
 
-	request, err := http.NewRequest("GET", p.URL, nil)
+	// 使用代理？
+	if p.ProxyUrl != "" {
+		proxy, _ := url.Parse(p.ProxyUrl)
+		client = &http.Client{
+			Transport: &http.Transport{
+				Proxy: http.ProxyURL(proxy),
+			},
+		}
+	}
+
+	client.Timeout = 1 * time.Hour
+
+	var request *http.Request
+	request, err = http.NewRequest("GET", p.URL, nil)
 	if err != nil {
-		return nil, fmt.Errorf("http.NewRequest: %s", err.Error())
+		return
 	}
 	request = request.WithContext(ctx)
 	if p.Trace != nil {
@@ -190,23 +210,28 @@ func (p *Downloader) Download(ctx context.Context) (resp *http.Response, err err
 		}
 	}
 
-	client.Timeout = 1 * time.Hour
+	//adding proxy authentication
+	if p.ProxyAuth != "" {
+		basicAuth := "Basic " + base64.StdEncoding.EncodeToString([]byte(p.ProxyAuth))
+		request.Header.Set("Proxy-Authorization", basicAuth)
+	}
 
 	// request
-	var response *http.Response
-	if response, err = client.Do(request); err != nil {
-		return nil, fmt.Errorf("http.Do: %s", err.Error())
+	if resp, err = client.Do(request); err != nil {
+		return
 	}
-	defer response.Body.Close()
+	defer resp.Body.Close()
 
 	// 处理头信息
-	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
-		return response, fmt.Errorf("http.StatusCode: %d", response.StatusCode)
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+
+		err = fmt.Errorf("http.StatusCode: %d", resp.StatusCode)
+		return
 	}
 
 	if p.HeaderHook != nil {
-		if err = p.HeaderHook(response.Header); err != nil {
-			return response, err
+		if err = p.HeaderHook(resp.Header); err != nil {
+			return
 		}
 	}
 
@@ -220,7 +245,7 @@ func (p *Downloader) Download(ctx context.Context) (resp *http.Response, err err
 
 	// download
 	for {
-		nr, er := response.Body.Read(buf)
+		nr, er := resp.Body.Read(buf)
 		p.N, p.nn = p.N+int64(nr), p.nn+int64(nr)
 
 		nt := time.Now().Unix()
@@ -253,12 +278,21 @@ func (p *Downloader) Download(ctx context.Context) (resp *http.Response, err err
 	}
 
 	if err != nil && err != io.EOF && err != context.DeadlineExceeded && err != context.Canceled {
-		return response, fmt.Errorf("downloading file %d: %s", p.N, err.Error())
+		err = fmt.Errorf("downloading file %d: %s", p.N, err.Error())
+		return
 	}
 
-	if dstWriter != nil {
-		if err = dstWriter.Flush(); err != nil {
-			return response, fmt.Errorf("flush tmp file: %s", err.Error())
+	if err = dstWriter.Flush(); err != nil {
+		return
+	}
+
+	if err = tmpDst.Close(); err != nil {
+		return
+	}
+
+	if p.TmPath != "" {
+		if err = os.Rename(p.TmPath, p.DstPath); err != nil {
+			return
 		}
 	}
 
@@ -269,34 +303,27 @@ func (p *Downloader) Download(ctx context.Context) (resp *http.Response, err err
 			nmd5 = fmt.Sprintf("%x", h.Sum(nil))
 		} else if p.MD5mode == MD5MODE1M {
 			if nmd5, err = Md51m(tmpDst); err != nil {
-				return response, fmt.Errorf("md5 err: %s", err.Error())
+				return
 			}
 		}
 
 		if p.MD5 != nmd5 {
-			return response, fmt.Errorf("md5 err: %s", nmd5)
+			err = fmt.Errorf("md5 err: %s", nmd5)
+			return
 		}
 	}
 
-	if p.DstPath != "" && p.TmPath != "" {
-		if err = tmpDst.Close(); err != nil {
-			return response, fmt.Errorf("close tmp file: %s", err.Error())
-		}
-
-		if err = os.Rename(p.TmPath, p.DstPath); err != nil {
-			return response, fmt.Errorf("rename: %s", err.Error())
-		}
-
-		dstStat, err := os.Stat(p.DstPath)
-		if err != nil && os.IsNotExist(err) {
-			return response, errors.New("download err")
-		}
-		if response.ContentLength >= 0 && dstStat.Size() != response.ContentLength {
-			return response, fmt.Errorf("size err: %s %d %d", p.DstPath, response.ContentLength, dstStat.Size())
-		}
+	var dstStat os.FileInfo
+	dstStat, err = os.Stat(p.DstPath)
+	if err != nil && os.IsNotExist(err) {
+		return resp, errors.New("download err")
+	}
+	if resp.ContentLength >= 0 && dstStat.Size() != resp.ContentLength {
+		err = fmt.Errorf("size err: %s %d %d", p.DstPath, resp.ContentLength, dstStat.Size())
+		return
 	}
 
-	return response, nil
+	return
 }
 
 func FileUpload(w http.ResponseWriter, r *http.Request) {
