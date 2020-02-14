@@ -42,10 +42,10 @@ type Downloader struct {
 	HeaderHook func(http.Header) error
 
 	URL       string
-	ProxyUrl  string
+	ProxyUrl  string // "http://127.0.0.1:8080"
 	ProxyAuth string // "user:password"
-	DstPath   string
-	TmPath    string
+	DstPath   string // 目标文件存放位置；目录以/结尾
+	TmPath    string // 临时文件存放目录路径
 
 	MD5     string
 	MD5mode int
@@ -111,38 +111,39 @@ func Md51m(f *os.File) (string, error) {
 }
 
 // "unix\nsocket\nhttp://host:port/uri"
-func (p *Downloader) Download(ctx context.Context) (resp *http.Response, err error) {
+func (p *Downloader) Download(ctx context.Context) (resp *http.Response, dest string, err error) {
 	var (
 		lastLogTime int64
-		h           hash.Hash
-		tmpDst      *os.File
 		dstWriter   *bufio.Writer
+		tmpDst      *os.File
+		h           hash.Hash
 	)
 
+	var request *http.Request
 	client := http.DefaultClient
+	client.Timeout = 10 * time.Minute
 
-	// 目标文件路径不能为空
+	if p.URL == "" {
+		return nil, "", fmt.Errorf("URL nil")
+	}
 	if p.DstPath == "" {
-		return nil, fmt.Errorf("DstPath nil")
+		return nil, "", fmt.Errorf("DstPath nil")
+	}
+	if p.TmPath == "" {
+		p.TmPath = path.Join(path.Dir(p.DstPath), "temp/", fmt.Sprintf("%v", time.Now().UnixNano()))
+	}
+
+	if err = os.MkdirAll(path.Dir(p.TmPath), 0755); err != nil {
+		return nil, "", fmt.Errorf("create tmpdir error: %s", err.Error())
 	}
 	if err = os.MkdirAll(path.Dir(p.DstPath), 0755); err != nil {
-		return nil, fmt.Errorf("create dstdir file: %s", err.Error())
+		return nil, "", fmt.Errorf("create dstdir error: %s", err.Error())
 	}
-	if tmpDst, err = os.Create(p.DstPath); err != nil {
-		return nil, fmt.Errorf("create dst file: %s", err.Error())
+
+	if tmpDst, err = os.Create(p.TmPath); err != nil {
+		return nil, "", fmt.Errorf("create tmp file: %s", err.Error())
 	}
 	dstWriter = bufio.NewWriter(tmpDst)
-
-	if p.TmPath != "" {
-		if err = os.MkdirAll(path.Dir(p.TmPath), 0755); err != nil {
-			return nil, fmt.Errorf("create tmpdir file: %s", err.Error())
-		}
-
-		if tmpDst, err = os.Create(p.TmPath); err != nil {
-			return nil, fmt.Errorf("create tmp file: %s", err.Error())
-		}
-		dstWriter = bufio.NewWriter(tmpDst)
-	}
 
 	// 线束删除临时文件
 	// 出错要删除已经下载的文件
@@ -160,7 +161,7 @@ func (p *Downloader) Download(ctx context.Context) (resp *http.Response, err err
 	if strings.HasPrefix(p.URL, "unix") {
 		urlfild := strings.Split(p.URL, "\n")
 		if len(urlfild) != 3 {
-			return nil, errors.New("url err")
+			return nil, "", errors.New("url err")
 		}
 
 		p.URL = urlfild[2]
@@ -187,9 +188,6 @@ func (p *Downloader) Download(ctx context.Context) (resp *http.Response, err err
 		}
 	}
 
-	client.Timeout = 1 * time.Hour
-
-	var request *http.Request
 	request, err = http.NewRequest("GET", p.URL, nil)
 	if err != nil {
 		return
@@ -224,7 +222,6 @@ func (p *Downloader) Download(ctx context.Context) (resp *http.Response, err err
 
 	// 处理头信息
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-
 		err = fmt.Errorf("http.StatusCode: %d", resp.StatusCode)
 		return
 	}
@@ -285,15 +282,24 @@ func (p *Downloader) Download(ctx context.Context) (resp *http.Response, err err
 	if err = dstWriter.Flush(); err != nil {
 		return
 	}
-
 	if err = tmpDst.Close(); err != nil {
 		return
 	}
 
-	if p.TmPath != "" {
-		if err = os.Rename(p.TmPath, p.DstPath); err != nil {
-			return
-		}
+	dest = p.DstPath
+	if strings.HasSuffix(dest, "/") {
+		dest = fmt.Sprintf("%s%s%s", dest, path.Base(p.TmPath), path.Ext(p.URL))
+	}
+	if err = os.Rename(p.TmPath, dest); err != nil {
+		return
+	}
+	dstStat, err := os.Stat(dest)
+	if err != nil && os.IsNotExist(err) {
+		return resp, "", errors.New("download err")
+	}
+	if resp.ContentLength >= 0 && dstStat.Size() != resp.ContentLength {
+		err = fmt.Errorf("size err: %s %d %d", dest, resp.ContentLength, dstStat.Size())
+		return
 	}
 
 	// check md5
@@ -311,16 +317,6 @@ func (p *Downloader) Download(ctx context.Context) (resp *http.Response, err err
 			err = fmt.Errorf("md5 err: %s", nmd5)
 			return
 		}
-	}
-
-	var dstStat os.FileInfo
-	dstStat, err = os.Stat(p.DstPath)
-	if err != nil && os.IsNotExist(err) {
-		return resp, errors.New("download err")
-	}
-	if resp.ContentLength >= 0 && dstStat.Size() != resp.ContentLength {
-		err = fmt.Errorf("size err: %s %d %d", p.DstPath, resp.ContentLength, dstStat.Size())
-		return
 	}
 
 	return
