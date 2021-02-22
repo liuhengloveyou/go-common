@@ -32,9 +32,10 @@ const (
 )
 
 type HttpErrMsg struct {
-	Code int         `json:"code"`
-	Msg  interface{} `json:"errmsg,omitempty"`
-	Data interface{} `json:"data,omitempty"`
+	Code  int         `json:"code"`
+	Total int64       `json:"total,omitempty"`
+	Msg   interface{} `json:"message,omitempty"`
+	Data  interface{} `json:"data,omitempty"`
 }
 
 type Downloader struct {
@@ -131,6 +132,8 @@ func (p *Downloader) Download(ctx context.Context) (resp *http.Response, dest st
 	}
 	if p.TmPath == "" {
 		p.TmPath = path.Join(path.Dir(p.DstPath), "temp/", fmt.Sprintf("%v", time.Now().UnixNano()))
+	} else if strings.HasSuffix(p.TmPath, "/") {
+		p.TmPath = fmt.Sprintf("%v/%v", p.TmPath, time.Now().UnixNano())
 	}
 
 	if err = os.MkdirAll(path.Dir(p.TmPath), 0755); err != nil {
@@ -490,6 +493,36 @@ func HttpErr(w http.ResponseWriter, code, errno int, data interface{}) {
 	defer w.(http.Flusher).Flush()
 
 	errMsg := HttpErrMsg{Code: errno}
+	if errno != 0 {
+		errMsg.Msg = data
+	} else {
+		errMsg.Data = data
+	}
+
+	b, _ := json.Marshal(errMsg)
+	w.Write(b)
+
+	return
+}
+
+func HttpJsonErr(w http.ResponseWriter, code int, data interface{}) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.WriteHeader(code)
+
+	b, _ := json.Marshal(data)
+	w.Write(b)
+	w.(http.Flusher).Flush()
+
+	return
+}
+func HttpResponseArray(w http.ResponseWriter, code, errno int, data interface{}, total int64) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.WriteHeader(code)
+	defer w.(http.Flusher).Flush()
+
+	errMsg := HttpErrMsg{Code: errno, Total: total}
 	if errno != 0 {
 		errMsg.Msg = data
 	} else {
