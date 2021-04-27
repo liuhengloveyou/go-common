@@ -9,7 +9,7 @@ import (
 func SingleInstane(pidfile string) {
 	if _, e := LockPidFile(pidfile); e != nil {
 		pid, _ := ioutil.ReadFile(pidfile)
-		panic(fmt.Errorf("Already run: [%v]; ERR: %v", string(pid), e.Error()))
+		panic(fmt.Errorf("Already running: [%v]", string(pid)))
 	}
 }
 

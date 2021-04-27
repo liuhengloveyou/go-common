@@ -34,7 +34,7 @@ const (
 type HttpErrMsg struct {
 	Code  int         `json:"code"`
 	Total int64       `json:"total,omitempty"`
-	Msg   interface{} `json:"message,omitempty"`
+	Msg   interface{} `json:"msg,omitempty"`
 	Data  interface{} `json:"data,omitempty"`
 }
 
