@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"database/sql/driver"
 	"errors"
+	"encoding/json"
 )
 
 // JSON
@@ -50,4 +51,9 @@ func (j JSON) IsNull() bool {
 
 func (j JSON) Equals(j1 JSON) bool {
 	return bytes.Equal([]byte(j), []byte(j1))
+}
+
+
+func (j JSON) Unmarshal(v interface{}) error {	
+	return json.Unmarshal(j, v)
 }
