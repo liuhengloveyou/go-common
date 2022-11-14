@@ -5,6 +5,7 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"encoding/base64"
+	"fmt"
 )
 
 func getKey(key string) []byte {
@@ -16,55 +17,60 @@ func getKey(key string) []byte {
 }
 
 //加密字符串
-func AesCBCEncrypt(msg, key string) (string, error) {
-	plantText := []byte(msg)
-	rkey := getKey(key)
+func AesCBCEncrypt(msg []byte, key string, iv []byte) (string, error) {
+	b, e := AesCBCEncryptByByte(msg, getKey(key), iv)
 
-	block, err := aes.NewCipher(rkey) //选择加密算法
+	return base64.RawStdEncoding.EncodeToString(b), e
+}
+
+func AesCBCEncryptByByte(msg, key, iv []byte) ([]byte, error) {
+	block, err := aes.NewCipher(key) //选择加密算法
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
-	plantText = PKCS7Padding(plantText, block.BlockSize())
+	if len(iv) == 0 {
+		iv = key[:aes.BlockSize]
+	}
 
-	blockModel := cipher.NewCBCEncrypter(block, rkey[:aes.BlockSize])
+	msg = PKCS7Padding(msg, block.BlockSize())
+	blockModel := cipher.NewCBCEncrypter(block, iv)
+	ciphertext := make([]byte, len(msg))
+	blockModel.CryptBlocks(ciphertext, msg)
 
-	ciphertext := make([]byte, len(plantText))
-
-	blockModel.CryptBlocks(ciphertext, plantText)
-
-	return base64.RawStdEncoding.EncodeToString(ciphertext), nil
+	return ciphertext, nil
 }
 
 //解密字符串
-func AesCBCDecrypt(msg, key string) (rst string, err error) {
+func AesCBCDecrypt(msg []byte, key string, iv []byte) (rst []byte, err error) {
+	return AesCBCDecryptByByte(msg, getKey(key), iv)
+}
+
+func AesCBCDecryptByByte(msg, key, iv []byte) (rst []byte, err error) {
 	defer func() {
-		//错误处理
 		if e := recover(); e != nil {
-			err = e.(error)
+			err = fmt.Errorf("%v", e)
 		}
 	}()
 
-	rmsg, err := base64.RawStdEncoding.DecodeString(msg)
+	block, err := aes.NewCipher(key)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
-	rkey := getKey(key)
-	block, err := aes.NewCipher(rkey)
-	if err != nil {
-		return "", err
+	if len(iv) == 0 {
+		iv = key[:aes.BlockSize]
 	}
 
-	blockModel := cipher.NewCBCDecrypter(block, rkey[:aes.BlockSize])
-	plantText := make([]byte, len(rmsg))
-	blockModel.CryptBlocks(plantText, rmsg)
-	plantText = PKCS7UnPadding(plantText, block.BlockSize())
+	blockModel := cipher.NewCBCDecrypter(block, iv)
+	plantText := make([]byte, len(msg))
+	blockModel.CryptBlocks(plantText, msg)
+	plantText = PKCS7UnPadding(plantText)
 
-	return string(plantText), nil
+	return plantText, nil
 }
 
-func PKCS7UnPadding(plantText []byte, blockSize int) []byte {
+func PKCS7UnPadding(plantText []byte) []byte {
 	length := len(plantText)
 	unpadding := int(plantText[length-1])
 	return plantText[:(length - unpadding)]
