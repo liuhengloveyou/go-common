@@ -490,11 +490,32 @@ func HttpErr(w http.ResponseWriter, code, errno int, data interface{}) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.WriteHeader(code)
-	
+
 	errMsg := HttpErrMsg{Code: errno}
 	if errno != 0 {
 		errMsg.Msg = data
 	} else {
+		errMsg.Data = data
+	}
+
+	b, _ := json.Marshal(errMsg)
+	w.Write(b)
+
+	w.(http.Flusher).Flush()
+
+	return
+}
+
+func HttpMsg(w http.ResponseWriter, code, errno int, msg string, data interface{}) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.WriteHeader(code)
+
+	errMsg := HttpErrMsg{Code: errno}
+	if len(msg) > 0 {
+		errMsg.Msg = msg
+	}
+	if data != nil {
 		errMsg.Data = data
 	}
 
